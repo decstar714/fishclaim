@@ -19,32 +19,6 @@ Docker deployment + NGINX staging UI
 
 ---
 
-Project Structure
-
-fishclaim/
-├── backend/        # FastAPI + PostGIS API
-│   ├── app/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── ...
-├── ui/             # React + Vite frontend
-│   ├── src/
-│   │   ├── features/map/
-│   │   │   ├── api.js
-│   │   │   ├── MapView.jsx
-│   │   │   └── ...
-│   │   ├── routes/
-│   │   │   └── map_bbox.py (dev helper)
-│   ├── public/
-│   ├── .env.local
-│   ├── vite.config.js
-│   ├── Dockerfile
-│   ├── nginx.conf
-│   └── ...
-└── docker/         # Deployment (Portainer, stacks, configs)
-
-
----
 
 Features (Implemented So Far)
 
