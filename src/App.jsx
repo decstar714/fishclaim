@@ -2,14 +2,16 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import {
-  clearAuthToken,
-  loadStoredToken,
+  clearSession,
+  loadStoredSession,
+  parseTokenResponse,
+  refreshSession,
   registerAuthInterceptor,
-  setAuthToken,
+  setSessionTokens,
 } from "./auth/token";
-import MapView from "./features/map/MapView"; // 👈 direct default import
+import MapView from "./features/map/MapView";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL; // keep your current var
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 function App() {
   const [waters, setWaters] = useState([]);
@@ -23,12 +25,13 @@ function App() {
   const [zonesError, setZonesError] = useState("");
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [claimsError, setClaimsError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // auth state
-  const [token, setToken] = useState(loadStoredToken);
+  const [session, setSession] = useState(() => loadStoredSession());
+  const accessToken = session?.accessToken || "";
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
 
-  // catch form state
   const [form, setForm] = useState({
     speciesId: "1",
     lengthCm: "",
@@ -37,21 +40,52 @@ function App() {
   });
 
   useEffect(() => {
-    const ejectAuthInterceptor = registerAuthInterceptor(() => {
-      setToken("");
+    const ejectAuthInterceptor = registerAuthInterceptor({
+      apiBase: API_BASE,
+      onUnauthorized: () => {
+        setSession({ accessToken: "", refreshToken: "" });
+        setCurrentUser(null);
+        setAuthMessage("Session expired. Please log in again.");
+      },
+      onTokenRefreshed: (tokens) => {
+        setSession(tokens);
+        setAuthMessage("Session refreshed.");
+        fetchMe();
+      },
     });
 
     return ejectAuthInterceptor;
   }, []);
 
-  // Load waters on first render
+  const fetchMe = async () => {
+    if (!accessToken) return;
+    try {
+      const res = await axios.get(`${API_BASE}/auth/me`);
+      setCurrentUser(res.data);
+      setAuthMessage("");
+    } catch (err) {
+      console.warn("Fetch me failed", err);
+      handleLogout();
+      setAuthMessage("Session expired. Please log in again.");
+    }
+  };
+
+  useEffect(() => {
+    if (accessToken) {
+      fetchMe();
+    } else {
+      setCurrentUser(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
   useEffect(() => {
     setWatersLoading(true);
     setWatersError("");
     axios
       .get(`${API_BASE}/waters/`)
       .then((res) => setWaters(res.data))
-      .catch((err) => setWatersError("Failed to load waters."))
+      .catch(() => setWatersError("Failed to load waters."))
       .finally(() => setWatersLoading(false));
   }, []);
 
@@ -86,7 +120,6 @@ function App() {
     setClaimsLoading(false);
   };
 
-  // 🔑 Login handler
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -98,10 +131,11 @@ function App() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
 
-      const t = res.data.access_token;
-      setToken(t);
-      setAuthToken(t);
-      alert("Logged in as " + loginForm.username);
+      const tokens = parseTokenResponse(res.data);
+      setSessionTokens(tokens);
+      setSession(tokens);
+      setAuthMessage("Logged in.");
+      await fetchMe();
     } catch (err) {
       console.error("Login failed", err);
       alert("Login failed – check username/password or backend logs.");
@@ -109,14 +143,29 @@ function App() {
   };
 
   const handleLogout = () => {
-    setToken("");
-    clearAuthToken();
+    clearSession();
+    setSession({ accessToken: "", refreshToken: "" });
+    setCurrentUser(null);
   };
 
-  // 🪝 Log catch
+  const handleAuthRecovery = async () => {
+    try {
+      const tokens = await refreshSession(API_BASE);
+      setSession(tokens);
+      setAuthMessage("Session refreshed.");
+      await fetchMe();
+      return true;
+    } catch (err) {
+      console.warn("Session refresh failed", err);
+      handleLogout();
+      setAuthMessage("Session expired. Please log in again.");
+      return false;
+    }
+  };
+
   const handleLogCatch = async (e) => {
     e.preventDefault();
-    if (!token) {
+    if (!accessToken) {
       alert("You must be logged in to log a catch.");
       return;
     }
@@ -141,6 +190,32 @@ function App() {
     }
   };
 
+  const updateClaimStatus = async (claimId, status) => {
+    if (!accessToken) return;
+    let review_notes = undefined;
+    if (status === "rejected") {
+      const note = window.prompt("Enter rejection reason:");
+      if (note !== null) {
+        review_notes = note;
+      }
+    }
+    try {
+      await axios.post(`${API_BASE}/claims/${claimId}/status`, {
+        status,
+        review_notes,
+      });
+      if (selectedZone) {
+        await loadClaims(selectedZone);
+      }
+      setAuthMessage("Claim status updated.");
+    } catch (err) {
+      console.error("Failed to update status", err);
+      alert("Failed to update status. Check console/back-end.");
+    }
+  };
+
+  const canReview = currentUser?.role === "admin" || currentUser?.role === "reviewer";
+
   return (
     <div
       style={{
@@ -150,16 +225,14 @@ function App() {
         color: "#e5e7eb",
       }}
     >
-      {/* 2-column layout: LEFT controls, RIGHT map */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "360px 1fr",
-          height: "100vh", // 👈 guarantees the map column has height
+          height: "100vh",
           width: "100%",
         }}
       >
-        {/* LEFT PANE — controls */}
         <aside
           style={{
             padding: "1rem",
@@ -172,8 +245,17 @@ function App() {
           <p style={{ fontSize: "0.9rem", opacity: 0.8 }}>
             Connected to: <code>{API_BASE}</code>
           </p>
+          {currentUser && (
+            <p style={{ fontSize: "0.9rem", marginTop: "0.25rem" }}>
+              User: <strong>{currentUser.display_name || currentUser.username}</strong> ({currentUser.role})
+            </p>
+          )}
+          {authMessage && (
+            <div style={{ marginTop: "0.5rem", color: "#93c5fd", fontSize: "0.95rem" }}>
+              {authMessage}
+            </div>
+          )}
 
-          {/* 🔐 Auth */}
           <section
             style={{
               marginTop: "1rem",
@@ -183,7 +265,7 @@ function App() {
             }}
           >
             <h2>Login</h2>
-            {!token ? (
+            {!accessToken ? (
               <form onSubmit={handleLogin}>
                 <div style={{ marginBottom: "0.5rem" }}>
                   <label>
@@ -247,7 +329,6 @@ function App() {
             )}
           </section>
 
-          {/* Waters */}
           <section style={{ marginTop: "1.5rem" }}>
             <h2>Waters</h2>
             {watersLoading && <p>Loading waters...</p>}
@@ -274,7 +355,6 @@ function App() {
             ))}
           </section>
 
-          {/* Zones */}
           {selectedWater && (
             <section style={{ marginTop: "1.5rem" }}>
               <h2>Zones in {selectedWater.name}</h2>
@@ -301,7 +381,6 @@ function App() {
             </section>
           )}
 
-          {/* Claims */}
           {selectedZone && (
             <section style={{ marginTop: "1.5rem" }}>
               <h2>Claims in {selectedZone.name}</h2>
@@ -312,8 +391,38 @@ function App() {
               ) : (
                 <ul>
                   {claims.map((c) => (
-                    <li key={c.id}>
-                      Species #{c.species_id} — {c.length_cm} cm (user #{c.user_id})
+                    <li key={c.id} style={{ marginBottom: "0.4rem" }}>
+                      <div>
+                        Species #{c.species_id} — {c.length_cm} cm (user #{c.user_id}) —{" "}
+                        <strong>{c.status}</strong>
+                      </div>
+                      {c.review_notes && (
+                        <div style={{ fontSize: "0.9rem", color: "#93c5fd" }}>
+                          Notes: {c.review_notes}
+                        </div>
+                      )}
+                      {canReview && (
+                        <div style={{ marginTop: "0.3rem", display: "flex", gap: "0.4rem" }}>
+                          <button
+                            onClick={() => updateClaimStatus(c.id, "under_review")}
+                            style={{ padding: "0.25rem 0.5rem" }}
+                          >
+                            Under Review
+                          </button>
+                          <button
+                            onClick={() => updateClaimStatus(c.id, "approved")}
+                            style={{ padding: "0.25rem 0.5rem" }}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => updateClaimStatus(c.id, "rejected")}
+                            style={{ padding: "0.25rem 0.5rem", background: "#f87171", border: "none", borderRadius: "0.25rem" }}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -321,7 +430,6 @@ function App() {
             </section>
           )}
 
-          {/* Log Catch Form */}
           {selectedZone && (
             <section style={{ marginTop: "1.5rem" }}>
               <h2>Log Catch in {selectedZone.name}</h2>
@@ -400,39 +508,37 @@ function App() {
           )}
         </aside>
 
-      {/* RIGHT PANE — live map */}
-      <main
-        style={{
-          position: "relative",
-          height: "100%",         // fill parent
-          minHeight: 0,
-          overflow: "hidden",     // prevent scrollbars on map
-        }}
-      >
-        {!token ? (
-          <div
-            style={{
-              height: "100%",
-              display: "grid",
-              placeItems: "center",
-              color: "#94a3b8",
-            }}
-          >
-            Log in to view the map.
-          </div>
-        ) : (
-          <div
-            style={{
-              height: "100%",
-              width: "100%",
-              background: "#0b1220",
-            }}
-          >
-            <MapView token={token} onAuthError={handleLogout} /> {/* ✅ active again */}
-          </div>
-        )}
-      </main>
-
+        <main
+          style={{
+            position: "relative",
+            height: "100%",
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          {!accessToken ? (
+            <div
+              style={{
+                height: "100%",
+                display: "grid",
+                placeItems: "center",
+                color: "#94a3b8",
+              }}
+            >
+              Log in to view the map.
+            </div>
+          ) : (
+            <div
+              style={{
+                height: "100%",
+                width: "100%",
+                background: "#0b1220",
+              }}
+            >
+              <MapView token={accessToken} onAuthError={handleAuthRecovery} />
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
