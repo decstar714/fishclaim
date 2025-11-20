@@ -1,6 +1,12 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
+import {
+  clearAuthToken,
+  loadStoredToken,
+  registerAuthInterceptor,
+  setAuthToken,
+} from "./auth/token";
 import MapView from "./features/map/MapView"; // 👈 direct default import
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL; // keep your current var
@@ -13,7 +19,7 @@ function App() {
   const [selectedZone, setSelectedZone] = useState(null);
 
   // auth state
-  const [token, setToken] = useState(localStorage.getItem("auth_token") || "");
+  const [token, setToken] = useState(loadStoredToken);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
 
   // catch form state
@@ -24,10 +30,13 @@ function App() {
     notes: "",
   });
 
-  // set axios auth header if token exists on first load/refresh
   useEffect(() => {
-    if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  }, [token]);
+    const ejectAuthInterceptor = registerAuthInterceptor(() => {
+      setToken("");
+    });
+
+    return ejectAuthInterceptor;
+  }, []);
 
   // Load waters on first render
   useEffect(() => {
@@ -74,8 +83,7 @@ function App() {
 
       const t = res.data.access_token;
       setToken(t);
-      localStorage.setItem("auth_token", t);
-      axios.defaults.headers.common["Authorization"] = `Bearer ${t}`;
+      setAuthToken(t);
       alert("Logged in as " + loginForm.username);
     } catch (err) {
       console.error("Login failed", err);
@@ -85,8 +93,7 @@ function App() {
 
   const handleLogout = () => {
     setToken("");
-    localStorage.removeItem("auth_token");
-    delete axios.defaults.headers.common["Authorization"];
+    clearAuthToken();
   };
 
   // 🪝 Log catch
