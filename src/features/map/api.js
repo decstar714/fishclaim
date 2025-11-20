@@ -11,7 +11,11 @@ export async function fetchRiversByBbox(token, bbox) {
   const url = `${API_BASE}${R_PATH}?${qsFromBbox(bbox)}`;
   console.log("[API] rivers →", url);
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`rivers ${res.status} : ${await res.text()}`);
+  if (!res.ok) {
+    const err = new Error(`rivers ${res.status} : ${await res.text()}`);
+    err.status = res.status;
+    throw err;
+  }
   return res.json(); // { features: [...] } or your backend’s shape
 }
 
@@ -19,6 +23,10 @@ export async function fetchClaimsByBbox(token, bbox) {
   const url = `${API_BASE}${C_PATH}?${qsFromBbox(bbox)}`;
   console.log("[API] claims →", url);
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`claims ${res.status} : ${await res.text()}`);
+  if (!res.ok) {
+    const err = new Error(`claims ${res.status} : ${await res.text()}`);
+    err.status = res.status;
+    throw err;
+  }
   return res.json(); // { claims: [...] } or your backend’s shape
 }

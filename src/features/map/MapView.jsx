@@ -12,7 +12,7 @@ function bboxFromMap(map) {
 }
 function debounce(fn, ms = 250) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
-export default function MapView({ token }) {
+export default function MapView({ token, onAuthError }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const [err, setErr] = useState(null);
@@ -98,7 +98,20 @@ export default function MapView({ token }) {
           setCounts({ rivers: riversFc.features.length, claims: claimsFc.features.length });
         } catch (e) {
           console.warn("[API] fetch fail", e);
-          setErr(String(e?.message || e));
+          const status = e?.status;
+          if (status === 401 || status === 403) {
+            const emptyFc = { type: "FeatureCollection", features: [] };
+            map.getSource("rivers")?.setData(emptyFc);
+            map.getSource("claims")?.setData(emptyFc);
+            setCounts({ rivers: 0, claims: 0 });
+            setErr("Session expired—please log in again");
+            if (typeof onAuthError === "function") onAuthError();
+            if (typeof window !== "undefined" && typeof window.fcHandleAuthError === "function") {
+              window.fcHandleAuthError();
+            }
+          } else {
+            setErr(String(e?.message || e));
+          }
         } finally {
           setLoading(false);
         }
