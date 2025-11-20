@@ -11,6 +11,12 @@ function App() {
   const [claims, setClaims] = useState([]);
   const [selectedWater, setSelectedWater] = useState(null);
   const [selectedZone, setSelectedZone] = useState(null);
+  const [watersLoading, setWatersLoading] = useState(true);
+  const [watersError, setWatersError] = useState("");
+  const [zonesLoading, setZonesLoading] = useState(false);
+  const [zonesError, setZonesError] = useState("");
+  const [claimsLoading, setClaimsLoading] = useState(false);
+  const [claimsError, setClaimsError] = useState("");
 
   // auth state
   const [token, setToken] = useState(localStorage.getItem("auth_token") || "");
@@ -31,33 +37,44 @@ function App() {
 
   // Load waters on first render
   useEffect(() => {
+    setWatersLoading(true);
+    setWatersError("");
     axios
       .get(`${API_BASE}/waters/`)
       .then((res) => setWaters(res.data))
-      .catch((err) => console.error("Error loading waters", err));
+      .catch((err) => setWatersError("Failed to load waters."))
+      .finally(() => setWatersLoading(false));
   }, []);
 
   const loadZones = async (water) => {
     setSelectedWater(water);
     setSelectedZone(null);
     setClaims([]);
+    setZones([]);
+    setZonesError("");
+    setClaimsError("");
+    setZonesLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/waters/${water.id}/zones`);
       setZones(res.data);
     } catch (err) {
-      console.error("Error loading zones", err);
+      setZonesError("Failed to load zones.");
     }
+    setZonesLoading(false);
   };
 
   const loadClaims = async (zone) => {
     setSelectedZone(zone);
+    setClaimsError("");
+    setClaimsLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/claims/zone/${zone.id}`);
       setClaims(res.data);
     } catch (err) {
-      console.error("Error loading claims", err);
+      setClaimsError("Failed to load claims.");
       setClaims([]);
     }
+    setClaimsLoading(false);
   };
 
   // 🔑 Login handler
@@ -226,6 +243,10 @@ function App() {
           {/* Waters */}
           <section style={{ marginTop: "1.5rem" }}>
             <h2>Waters</h2>
+            {watersLoading && <p>Loading waters...</p>}
+            {watersError && (
+              <p style={{ color: "#f87171" }}>{watersError}</p>
+            )}
             {waters.map((w) => (
               <button
                 key={w.id}
@@ -250,6 +271,8 @@ function App() {
           {selectedWater && (
             <section style={{ marginTop: "1.5rem" }}>
               <h2>Zones in {selectedWater.name}</h2>
+              {zonesLoading && <p>Loading zones...</p>}
+              {zonesError && <p style={{ color: "#f87171" }}>{zonesError}</p>}
               {zones.map((z) => (
                 <button
                   key={z.id}
@@ -275,7 +298,9 @@ function App() {
           {selectedZone && (
             <section style={{ marginTop: "1.5rem" }}>
               <h2>Claims in {selectedZone.name}</h2>
-              {claims.length === 0 ? (
+              {claimsLoading && <p>Loading claims...</p>}
+              {claimsError && <p style={{ color: "#f87171" }}>{claimsError}</p>}
+              {!claimsLoading && claims.length === 0 ? (
                 <p>No active claims yet.</p>
               ) : (
                 <ul>
