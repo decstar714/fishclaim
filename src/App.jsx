@@ -2,10 +2,12 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import {
-  clearAuthToken,
-  loadStoredToken,
+  clearSession,
+  loadStoredSession,
+  parseTokenResponse,
+  refreshSession,
   registerAuthInterceptor,
-  setAuthToken,
+  setSessionTokens,
 } from "./auth/token";
 import MapView from "./features/map/MapView"; // 👈 direct default import
 
@@ -25,7 +27,8 @@ function App() {
   const [claimsError, setClaimsError] = useState("");
 
   // auth state
-  const [token, setToken] = useState(loadStoredToken);
+  const [session, setSession] = useState(() => loadStoredSession());
+  const accessToken = session?.accessToken || "";
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
 
   // catch form state
@@ -37,12 +40,16 @@ function App() {
   });
 
   useEffect(() => {
-    const ejectAuthInterceptor = registerAuthInterceptor(() => {
-      setToken("");
+    const ejectAuthInterceptor = registerAuthInterceptor({
+      apiBase: API_BASE,
+      onUnauthorized: () => {
+        setSession({ accessToken: "", refreshToken: "" });
+      },
+      onTokenRefreshed: (tokens) => setSession(tokens),
     });
 
     return ejectAuthInterceptor;
-  }, []);
+  }, [API_BASE]);
 
   // Load waters on first render
   useEffect(() => {
@@ -98,9 +105,9 @@ function App() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
 
-      const t = res.data.access_token;
-      setToken(t);
-      setAuthToken(t);
+      const tokens = parseTokenResponse(res.data);
+      setSessionTokens(tokens);
+      setSession(tokens);
       alert("Logged in as " + loginForm.username);
     } catch (err) {
       console.error("Login failed", err);
@@ -109,14 +116,26 @@ function App() {
   };
 
   const handleLogout = () => {
-    setToken("");
-    clearAuthToken();
+    clearSession();
+    setSession({ accessToken: "", refreshToken: "" });
+  };
+
+  const handleAuthRecovery = async () => {
+    try {
+      const tokens = await refreshSession(API_BASE);
+      setSession(tokens);
+      return true;
+    } catch (err) {
+      console.warn("Session refresh failed", err);
+      handleLogout();
+      return false;
+    }
   };
 
   // 🪝 Log catch
   const handleLogCatch = async (e) => {
     e.preventDefault();
-    if (!token) {
+    if (!accessToken) {
       alert("You must be logged in to log a catch.");
       return;
     }
@@ -183,7 +202,7 @@ function App() {
             }}
           >
             <h2>Login</h2>
-            {!token ? (
+            {!accessToken ? (
               <form onSubmit={handleLogin}>
                 <div style={{ marginBottom: "0.5rem" }}>
                   <label>
@@ -409,7 +428,7 @@ function App() {
           overflow: "hidden",     // prevent scrollbars on map
         }}
       >
-        {!token ? (
+        {!accessToken ? (
           <div
             style={{
               height: "100%",
@@ -428,7 +447,7 @@ function App() {
               background: "#0b1220",
             }}
           >
-            <MapView token={token} onAuthError={handleLogout} /> {/* ✅ active again */}
+            <MapView token={accessToken} onAuthError={handleAuthRecovery} /> {/* ✅ active again */}
           </div>
         )}
       </main>

@@ -78,12 +78,13 @@ export default function MapView({ token, onAuthError }) {
         });
       }
 
-      const refetch = debounce(async () => {
+      const loadData = async (hasRetried = false) => {
         if (!token) return; // gate until logged-in
         const bbox = bboxFromMap(map);
+        setLoading(true);
+        setErr(null);
+
         try {
-          setLoading(true);
-          setErr(null);
           const [r, c] = await Promise.all([
             fetchRiversByBbox(token, bbox), // → { features: [...] }
             fetchClaimsByBbox(token, bbox), // → { claims: [...] }
@@ -99,13 +100,21 @@ export default function MapView({ token, onAuthError }) {
         } catch (e) {
           console.warn("[API] fetch fail", e);
           const status = e?.status;
-          if (status === 401 || status === 403) {
+          const sessionCleared = status === 401 || status === 403;
+
+          if (sessionCleared && typeof onAuthError === "function" && !hasRetried) {
+            const recovered = await onAuthError();
+            if (recovered) {
+              return loadData(true); // try once more with a fresh token
+            }
+          }
+
+          if (sessionCleared) {
             const emptyFc = { type: "FeatureCollection", features: [] };
             map.getSource("rivers")?.setData(emptyFc);
             map.getSource("claims")?.setData(emptyFc);
             setCounts({ rivers: 0, claims: 0 });
             setErr("Session expired—please log in again");
-            if (typeof onAuthError === "function") onAuthError();
             if (typeof window !== "undefined" && typeof window.fcHandleAuthError === "function") {
               window.fcHandleAuthError();
             }
@@ -115,9 +124,11 @@ export default function MapView({ token, onAuthError }) {
         } finally {
           setLoading(false);
         }
-      }, 250);
+      };
 
-      refetch();
+      const refetch = debounce(() => loadData(), 250);
+
+      loadData();
       map.on("moveend", refetch);
     });
 
