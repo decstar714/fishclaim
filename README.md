@@ -1,16 +1,17 @@
-# React + Vite
+# FishClaim UI (Vite + React)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend for FishClaim. Consumes the FastAPI backend.
 
-Currently, two official plugins are available:
+## Setup
+- `npm install`
+- Copy `.env.local.example` to `.env.local` and set `VITE_API_BASE_URL` (e.g. `http://localhost:8080/api` for local API).
+- Dev: `npm run dev` (default port 5173)
+- Lint/tests (if configured later): `npm run lint`, `npm test`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Day-to-day workflow (with backend)
+- Start from `dev` in both repos; create the same feature branch name (e.g. `feature/auth-session-hardening`).
+- Run the backend locally; point `VITE_API_BASE_URL` to it. Keep secrets out of git.
+- Keep commits small and focused; backend and frontend commits can be separate but branches should match.
+- Run checks before pushing (backend `pytest`; here `npm run lint`/tests if present).
+- Push both branches to origin when the end-to-end slice works; open PRs to `dev`.
+- Promote `dev` → `main` via PRs only; no direct pushes to `main`.
