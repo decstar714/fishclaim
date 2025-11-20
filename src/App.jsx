@@ -396,7 +396,7 @@ function App() {
               background: "#0b1220",
             }}
           >
-            <MapView token={token} /> {/* ✅ active again */}
+            <MapView token={token} onAuthError={handleLogout} /> {/* ✅ active again */}
           </div>
         )}
       </main>
