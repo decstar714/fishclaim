@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .database import Base, engine
 from . import models
-from .routes import health, waters, catches, claims, auth
+from .routes import health, waters, catches, claims, auth, sessions, species, mapdata
 
 settings = get_settings()
 
@@ -25,3 +25,6 @@ app.include_router(waters.router, prefix="/api")
 app.include_router(catches.router, prefix="/api")
 app.include_router(claims.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(sessions.router, prefix="/api")
+app.include_router(species.router, prefix="/api")
+app.include_router(mapdata.router, prefix="/api")

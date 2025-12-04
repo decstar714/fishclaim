@@ -46,6 +46,8 @@ With this setup the default CORS values allow the frontend dev server to call th
 ### Configuration
 - `DATABASE_URL`, `SECRET_KEY`, `ALGORITHM`, and `ACCESS_TOKEN_EXPIRE_MINUTES` are read from environment variables (or `.env`).
 - `CORS_ORIGINS` can be provided as a comma-separated list to control allowed front-end origins (defaults to localhost dev ports).
+- `CLAIM_LIFETIME_DAYS` controls how long a claim stays active without being refreshed by the owner.
+- Placeholder map endpoints return empty data at `/api/rivers` and `/api/claims` to keep the map client happy until real geometry is wired.
 
 ## Deploy script (server)
 - `./deploy.sh [branch]` (default branch is `main`) will `git pull`, build the backend image, and restart the backend container without touching the database container.
@@ -58,3 +60,26 @@ With this setup the default CORS values allow the frontend dev server to call th
 ## Notes
 - Secrets should never be committed. Keep real values in `.env` (gitignored) using `.env.example` as a template.
 - If you add new config keys, update `.env.example` and this README.
+
+## Seeding the database
+The seed script creates a default owner account, starter water/zone data, and species. Configure credentials in `.env` with:
+```
+SEED_USER_EMAIL=owner@example.com
+SEED_USER_USERNAME=owner
+SEED_USER_DISPLAY_NAME=FishClaim Owner
+SEED_USER_PASSWORD=ChangeMe!123   # change this before using anywhere real
+SEED_FORCE_RESET=true             # reset the password if the user already exists
+```
+
+Run inside the backend container (Docker) or your virtualenv:
+```
+python -m app.seed
+# or: docker exec -it fishclaim_backend python -m app.seed
+```
+
+When `SEED_FORCE_RESET=true`, re-running the seed will rotate the password for the seeded user instead of skipping if it already exists.
+
+## Session logging + claim refresh
+- New table: `sessions` for recording time on water (zone, optional species, optional best_length_cm).
+- Endpoint: `POST /api/sessions` (auth required) to log a session. Providing `species_id` lets the owner refresh an existing claim's timer; include `best_length_cm` to update length if it's better.
+- Claim decay: claims automatically expire after `CLAIM_LIFETIME_DAYS` unless refreshed by the owner (via a catch or a session).

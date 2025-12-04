@@ -9,17 +9,29 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgresql+psycopg2://user:password@db:5432/fishclaim
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
     ports:
       - "${BACKEND_PORT:-8080}:8000"
     restart: unless-stopped
-    networks:
-      - fishclaim
+    depends_on:
+      - db
 
-networks:
-  fishclaim:
-    external: true
-    name: fishclaim_default
+  db:
+    image: postgres:15-alpine
+    container_name: fishclaim_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: fishclaim
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+

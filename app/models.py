@@ -124,3 +124,26 @@ class Claim(Base):
         ),
     )
 
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    water_id = Column(Integer, ForeignKey("waters.id"), nullable=False)
+    zone_id = Column(Integer, ForeignKey("zones.id"), nullable=False)
+    species_id = Column(Integer, ForeignKey("species.id"), nullable=True)
+
+    started_at = Column(DateTime, default=datetime.utcnow)
+    duration_minutes = Column(Integer)
+    method = Column(String)
+    notes = Column(String)
+    conditions = Column(String)
+    best_length_cm = Column(Float)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    water = relationship("Water")
+    zone = relationship("Zone")
+    species = relationship("Species")

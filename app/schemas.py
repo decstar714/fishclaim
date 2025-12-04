@@ -65,6 +65,7 @@ class Claim(BaseModel):
     species_id: int
     length_cm: float
     created_at: datetime
+    expires_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -97,3 +98,27 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user_id: int | None = None
 
+
+class SessionBase(BaseModel):
+    water_id: int
+    zone_id: int
+    species_id: int | None = None
+    started_at: datetime | None = None
+    duration_minutes: int | None = None
+    method: str | None = None
+    notes: str | None = None
+    conditions: str | None = None
+    best_length_cm: float | None = None
+
+
+class Session(SessionBase):
+    id: int
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SessionCreate(SessionBase):
+    pass
