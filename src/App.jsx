@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import MapView from "./features/map/MapView"; // 👈 direct default import
+import SessionForm from "./components/SessionForm";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL; // keep your current var
 
@@ -9,12 +10,22 @@ function App() {
   const [waters, setWaters] = useState([]);
   const [zones, setZones] = useState([]);
   const [claims, setClaims] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [species, setSpecies] = useState([]);
   const [selectedWater, setSelectedWater] = useState(null);
   const [selectedZone, setSelectedZone] = useState(null);
 
   // auth state
   const [token, setToken] = useState(localStorage.getItem("auth_token") || "");
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registerForm, setRegisterForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+    display_name: "",
+  });
+  const [sessionZones, setSessionZones] = useState([]);
 
   // catch form state
   const [form, setForm] = useState({
@@ -29,12 +40,36 @@ function App() {
     if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }, [token]);
 
-  // Load waters on first render
+  const loadWaters = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/waters/`);
+      setWaters(res.data);
+    } catch (err) {
+      console.error("Error loading waters", err);
+    }
+  };
+
+  const loadSpecies = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/species/`);
+      const items = res.data || [];
+      setSpecies(items);
+      if (items.length) {
+        setForm((prev) => ({
+          ...prev,
+          speciesId: prev.speciesId || String(items[0].id),
+        }));
+      }
+    } catch (err) {
+      console.error("Error loading species", err);
+      setSpecies([]);
+    }
+  };
+
+  // Load data on first render
   useEffect(() => {
-    axios
-      .get(`${API_BASE}/waters/`)
-      .then((res) => setWaters(res.data))
-      .catch((err) => console.error("Error loading waters", err));
+    loadWaters();
+    loadSpecies();
   }, []);
 
   const loadZones = async (water) => {
@@ -44,6 +79,7 @@ function App() {
     try {
       const res = await axios.get(`${API_BASE}/waters/${water.id}/zones`);
       setZones(res.data);
+      setSessionZones(res.data);
     } catch (err) {
       console.error("Error loading zones", err);
     }
@@ -57,6 +93,22 @@ function App() {
     } catch (err) {
       console.error("Error loading claims", err);
       setClaims([]);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      loadSessions();
+    }
+  }, [token]);
+
+  const loadSessions = async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_BASE}/sessions`);
+      setSessions(res.data);
+    } catch {
+      // non-blocking
     }
   };
 
@@ -83,10 +135,37 @@ function App() {
     }
   };
 
+  // 📝 Register handler
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_BASE}/auth/register`, {
+        username: registerForm.username,
+        email: registerForm.email,
+        password: registerForm.password,
+        display_name: registerForm.display_name || undefined,
+      });
+      alert("Registration successful! Please log in.");
+      setIsRegistering(false);
+      setLoginForm({
+        username: registerForm.username,
+        password: registerForm.password,
+      });
+    } catch (err) {
+      console.error("Registration failed", err);
+      alert("Registration failed – check console/backend logs.");
+    }
+  };
+
   const handleLogout = () => {
     setToken("");
     localStorage.removeItem("auth_token");
     delete axios.defaults.headers.common["Authorization"];
+  };
+
+  const onSessionCreated = () => {
+    loadSessions();
+    if (selectedZone) loadClaims(selectedZone);
   };
 
   // 🪝 Log catch
@@ -160,47 +239,153 @@ function App() {
           >
             <h2>Login</h2>
             {!token ? (
-              <form onSubmit={handleLogin}>
-                <div style={{ marginBottom: "0.5rem" }}>
-                  <label>
-                    Username:
-                    <input
-                      type="text"
-                      value={loginForm.username}
-                      onChange={(e) =>
-                        setLoginForm({ ...loginForm, username: e.target.value })
-                      }
-                      style={{ marginLeft: "0.5rem" }}
-                    />
-                  </label>
-                </div>
-                <div style={{ marginBottom: "0.5rem" }}>
-                  <label>
-                    Password:
-                    <input
-                      type="password"
-                      value={loginForm.password}
-                      onChange={(e) =>
-                        setLoginForm({ ...loginForm, password: e.target.value })
-                      }
-                      style={{ marginLeft: "0.5rem" }}
-                    />
-                  </label>
-                </div>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "0.3rem 0.8rem",
-                    background: "#2563eb",
-                    border: "none",
-                    borderRadius: "0.375rem",
-                    color: "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  Log In
-                </button>
-              </form>
+              isRegistering ? (
+                <form onSubmit={handleRegister}>
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <label>
+                      Username:
+                      <input
+                        type="text"
+                        value={registerForm.username}
+                        onChange={(e) =>
+                          setRegisterForm({ ...registerForm, username: e.target.value })
+                        }
+                        style={{ marginLeft: "0.5rem" }}
+                        required
+                      />
+                    </label>
+                  </div>
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <label>
+                      Email:
+                      <input
+                        type="email"
+                        value={registerForm.email}
+                        onChange={(e) =>
+                          setRegisterForm({ ...registerForm, email: e.target.value })
+                        }
+                        style={{ marginLeft: "0.5rem" }}
+                        required
+                      />
+                    </label>
+                  </div>
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <label>
+                      Password:
+                      <input
+                        type="password"
+                        value={registerForm.password}
+                        onChange={(e) =>
+                          setRegisterForm({ ...registerForm, password: e.target.value })
+                        }
+                        style={{ marginLeft: "0.5rem" }}
+                        required
+                      />
+                    </label>
+                  </div>
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <label>
+                      Display Name:
+                      <input
+                        type="text"
+                        value={registerForm.display_name}
+                        onChange={(e) =>
+                          setRegisterForm({
+                            ...registerForm,
+                            display_name: e.target.value,
+                          })
+                        }
+                        style={{ marginLeft: "0.5rem" }}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    style={{
+                      padding: "0.3rem 0.8rem",
+                      background: "#10b981",
+                      border: "none",
+                      borderRadius: "0.375rem",
+                      color: "white",
+                      cursor: "pointer",
+                      marginRight: "0.5rem",
+                    }}
+                  >
+                    Sign Up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsRegistering(false)}
+                    style={{
+                      padding: "0.3rem 0.8rem",
+                      background: "transparent",
+                      border: "1px solid #4b5563",
+                      borderRadius: "0.375rem",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleLogin}>
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <label>
+                      Username:
+                      <input
+                        type="text"
+                        value={loginForm.username}
+                        onChange={(e) =>
+                          setLoginForm({ ...loginForm, username: e.target.value })
+                        }
+                        style={{ marginLeft: "0.5rem" }}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <label>
+                      Password:
+                      <input
+                        type="password"
+                        value={loginForm.password}
+                        onChange={(e) =>
+                          setLoginForm({ ...loginForm, password: e.target.value })
+                        }
+                        style={{ marginLeft: "0.5rem" }}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    style={{
+                      padding: "0.3rem 0.8rem",
+                      background: "#2563eb",
+                      border: "none",
+                      borderRadius: "0.375rem",
+                      color: "white",
+                      cursor: "pointer",
+                      marginRight: "0.5rem",
+                    }}
+                  >
+                    Log In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsRegistering(true)}
+                    style={{
+                      padding: "0.3rem 0.8rem",
+                      background: "transparent",
+                      border: "1px solid #4b5563",
+                      borderRadius: "0.375rem",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Sign Up
+                  </button>
+                </form>
+              )
             ) : (
               <div>
                 <p style={{ marginBottom: "0.5rem" }}>
@@ -271,6 +456,24 @@ function App() {
             </section>
           )}
 
+          {/* Log Session */}
+          {token && (
+            <section style={{ marginTop: "1.5rem" }}>
+              <h2>Log Session (zone-level)</h2>
+              <p style={{ fontSize: "0.9rem", opacity: 0.8 }}>
+                Refresh your claim by recording time on water. No exact spots stored.
+              </p>
+              <SessionForm
+                waters={waters}
+                zones={zones}
+                species={species}
+                apiBase={API_BASE}
+                token={token}
+                onCreated={onSessionCreated}
+              />
+            </section>
+          )}
+
           {/* Claims */}
           {selectedZone && (
             <section style={{ marginTop: "1.5rem" }}>
@@ -282,124 +485,51 @@ function App() {
                   {claims.map((c) => (
                     <li key={c.id}>
                       Species #{c.species_id} — {c.length_cm} cm (user #{c.user_id})
+                      {c.expires_at && (
+                        <div style={{ fontSize: "0.85rem", opacity: 0.75 }}>
+                          Expires: {new Date(c.expires_at).toLocaleString()}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
             </section>
           )}
-
-          {/* Log Catch Form */}
-          {selectedZone && (
-            <section style={{ marginTop: "1.5rem" }}>
-              <h2>Log Catch in {selectedZone.name}</h2>
-              <form onSubmit={handleLogCatch}>
-                <div style={{ marginBottom: "0.5rem" }}>
-                  <label>
-                    Species:
-                    <select
-                      value={form.speciesId}
-                      onChange={(e) =>
-                        setForm({ ...form, speciesId: e.target.value })
-                      }
-                      style={{ marginLeft: "0.5rem" }}
-                    >
-                      <option value="1">Brown Trout</option>
-                      <option value="2">Rainbow Trout</option>
-                    </select>
-                  </label>
-                </div>
-                <div style={{ marginBottom: "0.5rem" }}>
-                  <label>
-                    Length (cm):
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={form.lengthCm}
-                      onChange={(e) =>
-                        setForm({ ...form, lengthCm: e.target.value })
-                      }
-                      style={{ marginLeft: "0.5rem" }}
-                      required
-                    />
-                  </label>
-                </div>
-                <div style={{ marginBottom: "0.5rem" }}>
-                  <label>
-                    Method:
-                    <input
-                      type="text"
-                      value={form.method}
-                      onChange={(e) =>
-                        setForm({ ...form, method: e.target.value })
-                      }
-                      style={{ marginLeft: "0.5rem" }}
-                    />
-                  </label>
-                </div>
-                <div style={{ marginBottom: "0.5rem" }}>
-                  <label>
-                    Notes:
-                    <input
-                      type="text"
-                      value={form.notes}
-                      onChange={(e) =>
-                        setForm({ ...form, notes: e.target.value })
-                      }
-                      style={{ marginLeft: "0.5rem", width: "250px" }}
-                    />
-                  </label>
-                </div>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "0.35rem 0.8rem",
-                    background: "#2563eb",
-                    border: "none",
-                    borderRadius: "0.375rem",
-                    color: "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  Submit Catch
-                </button>
-              </form>
-            </section>
-          )}
         </aside>
 
-      {/* RIGHT PANE — live map */}
-      <main
-        style={{
-          position: "relative",
-          height: "100%",         // fill parent
-          minHeight: 0,
-          overflow: "hidden",     // prevent scrollbars on map
-        }}
-      >
-        {!token ? (
-          <div
-            style={{
-              height: "100%",
-              display: "grid",
-              placeItems: "center",
-              color: "#94a3b8",
-            }}
-          >
-            Log in to view the map.
-          </div>
-        ) : (
-          <div
-            style={{
-              height: "100%",
-              width: "100%",
-              background: "#0b1220",
-            }}
-          >
-            <MapView token={token} /> {/* ✅ active again */}
-          </div>
-        )}
-      </main>
+        {/* RIGHT PANE — live map */}
+        <main
+          style={{
+            position: "relative",
+            height: "100%",         // fill parent
+            minHeight: 0,
+            overflow: "hidden",     // prevent scrollbars on map
+          }}
+        >
+          {!token ? (
+            <div
+              style={{
+                height: "100%",
+                display: "grid",
+                placeItems: "center",
+                color: "#94a3b8",
+              }}
+            >
+              Log in to view the map.
+            </div>
+          ) : (
+            <div
+              style={{
+                height: "100%",
+                width: "100%",
+                background: "#0b1220",
+              }}
+            >
+              <MapView token={token} /> {/* ✅ active again */}
+            </div>
+          )}
+        </main>
 
       </div>
     </div>
