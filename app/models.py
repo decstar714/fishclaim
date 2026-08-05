@@ -7,7 +7,7 @@ from sqlalchemy import (
     Boolean,
     Float,
     ForeignKey,
-    UniqueConstraint,
+    Index,
 )
 from sqlalchemy.orm import relationship
 
@@ -117,10 +117,25 @@ class Claim(Base):
     catch = relationship("Catch", back_populates="claim")
     water = relationship("Water")
 
+    # One ACTIVE claim per (zone, species) -- enforced as a PARTIAL unique index.
+    #
+    # This was previously a plain UniqueConstraint on (zone_id, species_id,
+    # is_active), which is subtly wrong: it also constrains the *inactive* rows
+    # to one per zone+species. Beaten and expired claims are kept as history with
+    # is_active=False, so the second time a claim was superseded there were two
+    # rows wanting (zone, species, False) and the insert died with an
+    # IntegrityError. In practice the game broke on the THIRD time a claim
+    # changed hands in any zone+species pair -- which is the core loop.
+    #
+    # A partial index constrains only the rows that matter: at most one row with
+    # is_active true, and unlimited history beneath it.
     __table_args__ = (
-        UniqueConstraint(
-            "zone_id", "species_id", "is_active",
-            name="uq_active_claim_per_zone_species",
+        Index(
+            "uq_active_claim_per_zone_species",
+            "zone_id", "species_id",
+            unique=True,
+            postgresql_where=Column("is_active") == True,   # noqa: E712
+            sqlite_where=Column("is_active") == True,       # noqa: E712
         ),
     )
 
