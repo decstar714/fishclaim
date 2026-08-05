@@ -1,362 +1,174 @@
-FishClaim — Multiplayer Fishing Territory Game
+# FishClaim — UI
 
-A map-based fishing claim game where players can claim river zones, log catches, and compete for territory in a persistent world.
-This project includes:
+A map-based fishing territory game. Claim a stretch of river by catching the biggest fish
+in it; hold it by keeping showing up. This repo is the **React frontend** — the API lives
+in [`fishclaim-backend`](https://github.com/decstar714/fishclaim-backend).
 
-FastAPI backend (Dockerized, running on Ubuntu + PostGIS)
-
-React + Vite frontend
-
-MapLibre map rendering (watersheds, river zones, claims)
-
-JWT authentication
-
-Territory & claim mechanics
-
-Docker deployment + NGINX staging UI
-
-
+**Stack:** React 19 · Vite (rolldown) · MapLibre GL · Axios
 
 ---
 
+## The rule
 
-Features (Implemented So Far)
+Everything in the game comes from one rule: **per zone, per species, the longest fish
+holds the claim.** Claims decay if the holder stops fishing them.
 
-✔ Backend (FastAPI)
+```mermaid
+flowchart LR
+    A["Log a catch<br/><i>zone · species · length</i>"] --> B{"beats the<br/>current claim?"}
+    B -->|no| C["their claim stands"]
+    B -->|yes| D["you take the zone"]
+    E["claim goes unrefreshed<br/>for CLAIM_LIFETIME_DAYS"] --> F["it decays<br/><i>zone opens up</i>"]
+    G["log a session<br/><i>time on the water</i>"] --> H["timer resets<br/><i>hold without catching</i>"]
 
-JWT authentication (login + register)
+    style C fill:#7a2020,stroke:#4a1010,color:#fff
+    style D fill:#2d5a3d,stroke:#1a3a26,color:#fff
+    style F fill:#8a5a1a,color:#fff
+```
 
-Waters & zones API (/api/waters, /api/waters/{id}/zones)
+Claim resolution is decided server-side — see `evaluate_claim_for_catch` in the backend.
+The UI never awards a claim itself; it renders what the API reports.
 
-Claim system:
+## How the pieces fit
 
-Get claims by zone
+```mermaid
+flowchart TD
+    subgraph BROWSER["Browser"]
+        MV["MapView<br/><i>MapLibre GL</i>"]
+        SF["SessionForm"]
+        API["features/map/api.js<br/><i>axios + JWT header</i>"]
+        MV --> API
+        SF --> API
+    end
 
-Place new claim (replaces weaker claim)
+    subgraph STAGING["Staging container"]
+        NG["nginx<br/><i>serves the SPA,<br/>proxies /api</i>"]
+    end
 
+    BE["FastAPI backend<br/><i>auth · waters · zones<br/>catches · claims · sessions</i>"]
+    DB[("PostgreSQL")]
 
-Catches log endpoint
+    API -->|"/api/..."| NG --> BE --> DB
 
-Swagger docs available at /api/docs
+    style NG fill:#2d5a3d,stroke:#1a3a26,color:#fff
+```
 
-Dockerized (FastAPI + Uvicorn + PostGIS)
+The nginx proxy means the browser only ever talks to **one origin**, so the app can use a
+relative `/api` base and CORS never enters the picture in staging. In local dev you point
+`VITE_API_BASE_URL` straight at the backend instead, and the backend's `CORS_ORIGINS` has
+to include your dev host.
 
+### Map data is still a placeholder
 
-✔ Frontend (React + Vite)
+`/api/rivers` and `/api/claims` currently return **empty GeoJSON**. The backend stores
+positions as plain `lat`/`lng` floats and zones as ordered records — there is no geometry
+layer yet, so there are no polygons to draw. The endpoints exist so the map client gets a
+valid empty response instead of a 404.
 
-Login flow using JWT
-
-Token stored & attached to Axios
-
-Water selection sidebar
-
-MapLibre map with:
-
-Watersheds
-
-River zones
-
-Claims overlay
-
-
-Claim placement UI + feedback modal
-
-Error notifications
-
-API abstraction layer
-
-
-✔ DevOps / Server
-
-Backend & database running on Ubuntu server through Portainer
-
-Staging UI build served by NGINX proxying to backend
-
-Environment variables supported (VITE_API_BASE_URL)
-
-GitHub repo with:
-
-main (protected)
-
-dev (integration/testing)
-
-feature branches (feature/*)
-
-
-
+Wiring real zone geometry is the next meaningful piece of work, and the point at which
+PostGIS becomes a genuine dependency rather than an aspiration.
 
 ---
 
-Tech Stack
+## Local development
 
-Frontend
-
-React (Vite + JSX)
-
-MapLibre GL
-
-Axios
-
-Tailwind (optional)
-
-Docker + NGINX (for staging)
-
-
-Backend
-
-FastAPI
-
-PostgreSQL + PostGIS
-
-SQLAlchemy
-
-Pydantic Schemas
-
-JWT Authentication
-
-
-DevOps
-
-Docker / Docker Compose
-
-Portainer (Ubuntu server)
-
-NGINX reverse proxy
-
-GitHub flow branching strategy
-
-
-
----
-
-Local Development Setup
-
-1) Clone the repo
-
-git clone https://github.com/<yourname>/fishclaim.git
-cd fishclaim/ui
-
-2) Install dependencies
-
+```bash
 npm install
+cp .env.example .env.local     # then edit it
+npm run dev -- --host          # --host exposes it to your phone on the LAN
+```
 
-3) Create .env.local
+Available at `http://localhost:5173`, and at `http://<your-lan-ip>:5173` from a phone on
+the same network.
 
-VITE_API_BASE_URL=http://10.100.1.37:8080/api
-MAP_STYLE=https://demotiles.maplibre.org/style.json
+### Environment
 
-4) Run Vite dev server
+`.env.local` is gitignored. `.env.example` is the template.
 
-npm run dev -- --host
+| Variable | Purpose |
+|---|---|
+| `VITE_API_BASE_URL` | Backend API base, e.g. `http://<server-ip>:8080/api`. Leave as `/api` when running behind the nginx proxy. |
+| `VITE_RIVERS_BBOX_PATH` | River geometry path (default `/rivers`) |
+| `VITE_CLAIMS_BBOX_PATH` | Claim geometry path (default `/claims`) |
 
-Your UI will be available at:
+> `VITE_*` values are **inlined into the bundle at build time**, not read at runtime.
+> Anything put in one is readable by anyone who opens devtools — never a secret.
 
-http://localhost:5173
-http://<PC-LAN-IP>:5173 (for testing on your phone)
+### Running the backend alongside
 
+See the [backend README](https://github.com/decstar714/fishclaim-backend). In short:
 
----
-
-Running the Backend (Docker)
-
-Backend & PostGIS run via Portainer on your server:
-
-API Base URL: http://10.100.1.37:8080/api
-
-Swagger docs: http://10.100.1.37:8080/docs
-
-
-If you need to rebuild:
-
+```bash
+cd ../fishclaim-backend
+cp .env.example .env      # set SECRET_KEY — generate your own, see below
 docker compose up -d --build
+```
 
+Generate a signing key rather than reusing one:
 
----
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
 
-Staging UI Deployment (Docker + NGINX)
-
-The UI has a production build served via NGINX.
-Example files included in repo:
-
-nginx.conf
-
-server {
-  listen 80;
-  root /usr/share/nginx/html;
-
-  location / {
-    try_files $uri /index.html;
-  }
-
-  location /api/ {
-    proxy_pass http://10.100.1.37:8080/api/;
-  }
-}
-
-Dockerfile
-
-FROM node:20-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
-
-Deploy
-
-From server or Portainer:
-
-docker compose up -d --build
-
-Staging UI will be available at:
-http://10.100.1.37:8081
-
+API on `:8080`, Swagger at `/api/docs`.
 
 ---
 
-Branching Strategy (Team Workflow)
+## Staging deployment
 
-main
+`Dockerfile` builds the SPA with Node and serves the output with nginx — the runtime image
+contains no Node and no `node_modules`.
 
-Production-ready
+```bash
+docker build -t fishclaim-ui .
+docker run -d -p 8081:80 \
+  -e BACKEND_ORIGIN=http://fishclaim_backend:8000 \
+  fishclaim-ui
+```
 
-Protected (no direct pushes)
+`BACKEND_ORIGIN` is substituted into `nginx.conf` at container start, so the same image can
+be pointed at a different backend without rebuilding.
 
+---
 
-dev
+## Layout
 
-Integration branch
+```
+src/
+├── main.jsx                 entry
+├── App.jsx                  shell + auth flow
+├── components/
+│   └── SessionForm.jsx      log time on the water (refreshes a claim)
+└── features/map/
+    ├── MapView.jsx          MapLibre map, layers, claim interaction
+    ├── api.js               axios wrapper, attaches the JWT
+    └── index.js             barrel
+```
 
-All features merge into dev first
+---
 
+## Branching
 
-feature branches
+| Branch | Role |
+|---|---|
+| `main` | production-ready, protected |
+| `dev` | integration — features land here first |
+| `feature/*` | one branch per task |
 
-feature/map-click-claims
-feature/auth-page
-feature/zone-highlights
-
-Workflow
-
-1. Pull latest dev:
-
-git checkout dev
-git pull
-
-
-2. Make feature branch:
-
+```bash
+git checkout dev && git pull
 git checkout -b feature/my-task
-
-
-3. Commit + push:
-
+# ... commit ...
 git push -u origin feature/my-task
-
-
-4. Open PR → base: dev
-
-
-5. After testing → merge dev → main
-
-
-6. Rebuild server containers for new release
-
-
-
+# PR into dev; merge dev -> main once tested
+```
 
 ---
 
-API Endpoints Overview
+## Status
 
-Waters
+**Working:** JWT auth (register + login), waters and zones from the API, catch logging,
+session logging, claim placement and takeover, claim decay, MapLibre map with navigation.
 
-GET /api/waters
-GET /api/waters/{id}/zones
-
-Claims
-
-GET /api/claims/zone/{zone_id}
-POST /api/claims
-
-Auth
-
-POST /api/auth/login
-POST /api/auth/register
-
-Catches
-
-POST /api/catches
-
-
----
-
-Roadmap
-
-Short-Term
-
-Better map styling (Tarkov/Zomboid rustic vibe)
-
-Zone highlight interactions
-
-Claim conflict animations
-
-Catch history view
-
-Player stats page
-
-
-Mid-Term
-
-Seasons & leaderboards
-
-Territory decay
-
-Friends / teams
-
-Mobile UI pass
-
-
-Long-Term
-
-Entire US watershed tile rendering
-
-Replay viewer
-
-Server-side tile preprocessing
-
-Offline cache for field fishing
-
-
-
----
-
-Contributing (Your Team)
-
-Requirements to contribute:
-
-You must create a feature branch
-
-PR into dev
-
-Code review required
-
-main is locked and protected
-
-
-Simple commit style
-
-feat(map): zone hover highlight
-fix(api): null zone_id crash
-chore(ui): cleanup console logs
-
-
----
-
-License
-
-MIT License
+**Not done yet:** real zone geometry (rivers/claims return empty GeoJSON), claims overlay
+rendering, watershed layers.
