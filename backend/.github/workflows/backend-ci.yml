@@ -1,0 +1,55 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests (if present)
+        run: |
+          if [ -d tests ]; then
+            pip install pytest
+            pytest
+          else
+            echo "tests/ not present; skipping pytest."
+          fi
+
+      # Importing app.main builds Settings and calls create_all, so it needs a
+      # database URL and a key that passes validation. SQLite keeps this step
+      # free of a service container -- it only has to prove the app imports.
+      - name: Import smoke test
+        env:
+          DATABASE_URL: sqlite:///./ci.db
+          SECRET_KEY: ci-only-not-a-real-key-0123456789abcdef
+        run: |
+          python -m compileall app
+          python - <<'PY'
+          import importlib
+          import sys
+
+          try:
+              importlib.import_module("app.main")
+              print("app.main import successful")
+          except Exception as exc:
+              print(f"Import failed: {exc}", file=sys.stderr)
+              raise
+          PY
