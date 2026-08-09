@@ -2,9 +2,9 @@
 #
 # Block commits that contain credential-shaped strings.
 #
-# This repo has already leaked a Shopify Admin token once -- it is still in the
-# history and cannot be removed, only rotated. This hook exists so it does not
-# happen a second time.
+# This repo is public, so anything committed here is permanent -- rewriting
+# history does not help once the objects have been cloned or indexed. The hook
+# catches a bad commit while it is still cheap to fix.
 #
 # Install:
 #   ln -sf ../../hooks/pre-commit .git/hooks/pre-commit
