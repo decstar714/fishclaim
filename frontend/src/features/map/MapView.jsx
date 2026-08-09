@@ -110,7 +110,11 @@ export default function MapView({ token }) {
 
     // cleanup
     return () => {
-      try { map.__ro?.disconnect?.(); } catch {}
+      try {
+        map.__ro?.disconnect?.();
+      } catch (e) {
+        console.warn("Map observer cleanup failed", e);
+      }
       map.remove();
       mapRef.current = null;
     };

@@ -25,7 +25,6 @@ function App() {
     password: "",
     display_name: "",
   });
-  const [sessionZones, setSessionZones] = useState([]);
 
   // catch form state
   const [form, setForm] = useState({
@@ -79,7 +78,6 @@ function App() {
     try {
       const res = await axios.get(`${API_BASE}/waters/${water.id}/zones`);
       setZones(res.data);
-      setSessionZones(res.data);
     } catch (err) {
       console.error("Error loading zones", err);
     }
@@ -471,6 +469,23 @@ function App() {
                 token={token}
                 onCreated={onSessionCreated}
               />
+
+              {sessions.length > 0 && (
+                <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", opacity: 0.8 }}>
+                  <div style={{ marginBottom: "0.25rem" }}>
+                    Recent sessions ({sessions.length}):
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
+                    {sessions.slice(0, 5).map((s) => (
+                      <li key={s.id}>
+                        {new Date(s.started_at).toLocaleDateString()}
+                        {s.duration_minutes ? ` — ${s.duration_minutes} min` : ""}
+                        {s.best_length_cm ? ` — best ${s.best_length_cm} cm` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
           )}
 
@@ -494,6 +509,76 @@ function App() {
                   ))}
                 </ul>
               )}
+            </section>
+          )}
+
+          {/* Log Catch -- the one action that can take a zone off somebody */}
+          {selectedZone && (
+            <section style={{ marginTop: "1.5rem" }}>
+              <h2>Log Catch in {selectedZone.name}</h2>
+              <form onSubmit={handleLogCatch}>
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <label>
+                    Species:{" "}
+                    <select
+                      value={form.speciesId}
+                      onChange={(e) => setForm({ ...form, speciesId: e.target.value })}
+                    >
+                      {species.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.common_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <label>
+                    Length (cm):{" "}
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={form.lengthCm}
+                      onChange={(e) => setForm({ ...form, lengthCm: e.target.value })}
+                      required
+                    />
+                  </label>
+                </div>
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <label>
+                    Method:{" "}
+                    <input
+                      type="text"
+                      value={form.method}
+                      onChange={(e) => setForm({ ...form, method: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <label>
+                    Notes:{" "}
+                    <input
+                      type="text"
+                      value={form.notes}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      style={{ width: "220px" }}
+                    />
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  style={{
+                    padding: "0.35rem 0.8rem",
+                    background: "#2563eb",
+                    border: "none",
+                    borderRadius: "0.375rem",
+                    color: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  Submit Catch
+                </button>
+              </form>
             </section>
           )}
         </aside>

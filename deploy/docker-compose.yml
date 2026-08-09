@@ -1,0 +1,72 @@
+# The whole stack: database, API, and the SPA behind nginx.
+#
+# Build contexts point back at backend/ and frontend/, because this file lives
+# in deploy/. Run it from here:
+#
+#   cd deploy && docker compose up -d --build
+#
+# Reads deploy/.env. Copy .env.example next to this file and fill it in.
+
+name: fishclaim
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: fishclaim_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fishclaim}
+      POSTGRES_USER: ${POSTGRES_USER:-fishclaim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Only bound to loopback. The API talks to it over the compose network and
+    # does not need the port published at all -- this is here for psql.
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fishclaim} -d ${POSTGRES_DB:-fishclaim}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      # Context is backend/, not the repo root, because the Dockerfile's COPY
+      # paths are relative to it (COPY app ./app).
+      context: ../backend
+    container_name: fishclaim_backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-fishclaim}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:-fishclaim}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in deploy/.env}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      CLAIM_LIFETIME_DAYS: ${CLAIM_LIFETIME_DAYS:-30}
+      # The browser only ever talks to the frontend's origin, so the API does
+      # not need permissive CORS in this stack.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
+    ports:
+      - "${BACKEND_PORT:-8080}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      # Empty base means the SPA calls a relative /api, which nginx proxies --
+      # one origin, so CORS never comes into it.
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: fishclaim_ui
+    environment:
+      BACKEND_ORIGIN: http://fishclaim_backend:8000
+    ports:
+      - "${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
