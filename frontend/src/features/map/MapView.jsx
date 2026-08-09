@@ -15,6 +15,7 @@ function debounce(fn, ms = 250) { let t; return (...a) => { clearTimeout(t); t =
 export default function MapView({ token }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const fitted = useRef(false);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
   const [counts, setCounts] = useState({ rivers: 0, claims: 0 });
@@ -64,18 +65,46 @@ export default function MapView({ token }) {
       }
       if (!map.getSource("claims")) {
         map.addSource("claims", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        // A claim has no shape of its own -- it borrows the reach it was won on,
+        // so it is drawn as a line over the river rather than as a fill. A fill
+        // renders nothing at all for a LineString, which is why the map used to
+        // look empty even with data in it.
         map.addLayer({
-          id: "claims-fill",
-          type: "fill",
-          source: "claims",
-          paint: { "fill-color": ["coalesce", ["get", "color"], "#f59e0b"], "fill-opacity": 0.35 },
-        });
-        map.addLayer({
-          id: "claims-outline",
+          id: "claims-glow",
           type: "line",
           source: "claims",
-          paint: { "line-color": "#2b2b2b", "line-width": 1 },
+          paint: {
+            "line-color": "#f59e0b",
+            "line-opacity": 0.35,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 8, 12, 16],
+            "line-blur": 3,
+          },
         });
+        map.addLayer({
+          id: "claims-line",
+          type: "line",
+          source: "claims",
+          paint: {
+            "line-color": "#f59e0b",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2.5, 12, 5],
+          },
+        });
+
+        map.on("click", "claims-line", (e) => {
+          const p = e.features?.[0]?.properties || {};
+          new maplibregl.Popup({ closeButton: false })
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `<div style="font:13px system-ui">
+                 <strong>${p.zone_name ?? "Zone"}</strong><br/>
+                 ${p.species ?? "?"} — ${p.length_cm} cm<br/>
+                 <span style="opacity:.7">angler #${p.user_id}</span>
+               </div>`
+            )
+            .addTo(map);
+        });
+        map.on("mouseenter", "claims-line", () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "claims-line", () => { map.getCanvas().style.cursor = ""; });
       }
 
       const refetch = debounce(async () => {
@@ -96,6 +125,22 @@ export default function MapView({ token }) {
           map.getSource("rivers").setData(riversFc);
           map.getSource("claims").setData(claimsFc);
           setCounts({ rivers: riversFc.features.length, claims: claimsFc.features.length });
+
+          // Frame the water once, the first time any arrives. Only once --
+          // fitting on every load would fight the user every time they panned,
+          // and moveend is what triggers this in the first place.
+          if (!fitted.current && riversFc.features.length) {
+            const b = new maplibregl.LngLatBounds();
+            for (const f of riversFc.features) {
+              const parts =
+                f.geometry.type === "MultiLineString"
+                  ? f.geometry.coordinates.flat()
+                  : f.geometry.coordinates;
+              for (const c of parts) b.extend([c[0], c[1]]);
+            }
+            fitted.current = true;
+            map.fitBounds(b, { padding: 60, duration: 800, maxZoom: 13 });
+          }
         } catch (e) {
           console.warn("[API] fetch fail", e);
           setErr(String(e?.message || e));

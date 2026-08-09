@@ -229,10 +229,15 @@ is answerable without recomputing anything.
 because expiry is computed as `created_at + CLAIM_LIFETIME_DAYS`. It means *last refreshed*. The
 column is misnamed and worth renaming the next time the schema moves.
 
-There is no geometry layer — no PostGIS, no GeoAlchemy2, no `ST_` calls. Positions are plain
-`lat`/`lng` floats on a catch, and zones are ordered records rather than polygons. Zone
-boundaries and point-in-polygon claim resolution are the features that would make PostGIS worth
-adding; until then it would be weight without a job.
+**Zone geometry is a GeoJSON LineString in a text column, not PostGIS.** `zones.comid` is the
+NHD identifier for the reach and `zones.geometry_geojson` is the shape USGS hands back. Nothing
+here does spatial queries — the map only needs to draw it, and the viewport filter is a bounding
+box compared in Python, which costs nothing at a river's worth of reaches.
+
+The day something asks *"which reach contains this point"* — snapping a catch's `lat`/`lng` to
+the water it was caught in, rather than trusting the zone the angler picked — is the day PostGIS
+earns its place. Not before. That query is also the one that would make cheating harder, so it
+is a likely next step rather than a hypothetical.
 
 ---
 
@@ -252,8 +257,8 @@ All routes are mounted under `/api`. Interactive docs at `/api/docs` once the se
 | `GET` | `/api/claims/zone/{zone_id}` | — | Active claims in a zone, with `expires_at` |
 | `POST` | `/api/sessions/` | **yes** | Log time on the water. Can refresh a claim |
 | `GET` | `/api/sessions/` | **yes** | Your own sessions |
-| `GET` | `/api/rivers` | — | Placeholder — returns empty GeoJSON |
-| `GET` | `/api/claims` | — | Placeholder — returns empty GeoJSON |
+| `GET` | `/api/rivers` | — | Zone geometry as GeoJSON, filtered to a viewport bbox |
+| `GET` | `/api/claims` | — | Held reaches only, each carrying its zone's geometry |
 
 Auth is a bearer JWT from `/api/auth/login`, signed HS256, validated in `backend/app/deps.py`.
 
@@ -265,8 +270,9 @@ curl -X POST http://localhost:8080/api/auth/login \
   -d 'username=angler&password=...'
 ```
 
-`/api/rivers` and `/api/claims` accept `minX`/`minY`/`maxX`/`maxY` and ignore them. They exist so
-the map client gets a valid empty response instead of a 404 while there is no geometry to serve.
+`/api/rivers` and `/api/claims` take `minX`/`minY`/`maxX`/`maxY` and return only what falls
+inside, which is what lets the client refetch on every pan without dragging the whole river
+across the wire. Omit them and you get everything.
 
 ---
 
@@ -283,7 +289,7 @@ One view: a fixed control rail on the left, the map filling the rest.
 │  ──────────  │                                            │
 │  Waters      │      ┌────────────────┐                    │
 │  ──────────  │      │ FishClaim      │  ← HUD: feature    │
-│  Zones       │      │ Rivers: 0      │    counts, errors  │
+│  Zones       │      │ Rivers: 25     │    counts, errors  │
 │  ──────────  │      │ Claims: 0      │                    │
 │  Claims      │      └────────────────┘                    │
 │  ──────────  │                                            │
@@ -322,12 +328,52 @@ zoom-interpolated width, `claims` as translucent fills with an outline. On `load
 request rather than forty. A HUD in the top-left shows the loaded feature counts, or the error if
 a fetch failed.
 
-**The map data is still a placeholder.** `/api/rivers` and `/api/claims` return empty GeoJSON,
-because there is no geometry layer to serve from. Everything above works; it renders zero
-features — which is why the HUD in the screenshots reads `Rivers: 0 · Claims: 0` over a
-basemap with nothing drawn on it. The game is played through the rail today; the map is
-scenery until zones have shapes. Wiring real zone geometry is the next meaningful piece of
-work.
+### Where the water comes from
+
+The map draws real rivers, and none of that geometry was drawn by hand.
+
+![Held water](docs/img/map-claims.png)
+
+*Twenty-five reaches of the South Branch Raritan, from Califon down past High Bridge and
+Clinton. Blue is open water; amber is held. The map fits itself to the water on first load.*
+
+Zones are **NHD reaches**. USGS has already segmented every stream in the country and given
+each segment a stable identifier — a COMID — so a zone is a real stretch of river rather than
+a shape somebody invented. `scripts/ingest_nhd.py` walks a river from any point on it and
+writes those reaches in:
+
+```bash
+# look first -- no database involved
+python scripts/ingest_nhd.py --start -74.8517 40.7178 --km 25 --dry-run
+
+# then write them
+python scripts/ingest_nhd.py --start -74.8517 40.7178 --km 25 --water 1
+```
+
+```
+finding the reach at -74.8517, 40.7178 ...
+  COMID 9512806
+walking DM for 25.0 km ...
+  25 reaches, 27.7 km of water
+```
+
+Re-running is safe: reaches are keyed on COMID, so an existing zone is updated rather than
+duplicated.
+
+**A claim has no shape of its own — it borrows the reach it was won on.** That is why zones
+needed geometry before the map could mean anything, and it is why claims are drawn as a line
+over the river rather than as a fill. A fill renders nothing at all for a LineString.
+
+![A claimed reach](docs/img/map-reach.png)
+
+*Click a held reach and it tells you what is holding it. You can see where the claim ends and
+open water begins, just above Califon — that boundary is a real NHD reach edge, not a
+decision anyone made.*
+
+**Why reaches and not a hex grid.** The obvious prior art claims *area*: Pokémon GO divides the
+world into S2 cells, Run An Empire into tiles. A city is an area, so that works. A river is a
+line — drop a hex grid on the South Branch and most cells are pasture with a thread of water
+through one corner. A reach is the unit anglers already think in, and it comes pre-drawn.
 
 ---
 
@@ -604,7 +650,8 @@ fishclaim/
 │   └── .env.example
 │
 ├── scripts/
-│   └── check_api_contract.py    # the UI and the API must agree
+│   ├── check_api_contract.py    # the UI and the API must agree
+│   └── ingest_nhd.py            # pull real reach geometry from USGS into zones
 │
 └── hooks/pre-commit             # credential scanner (install it manually)
 ```
@@ -639,7 +686,8 @@ navigation and viewport refetch.
 
 | | Why it is next |
 |---|---|
-| Zone geometry | Zones are ordered records, not shapes. The map is wired end to end and renders zero features because there is nothing to draw. This is the one that makes the app look like the thing it is |
+| Snap catches to the water | A catch carries `lat`/`lng` but trusts whichever zone the angler picked. Point-to-reach matching would fix that, and it is the query that finally justifies PostGIS |
+| Graded decay | A claim is binary and dies at `CLAIM_LIFETIME_DAYS`. Run An Empire erodes influence daily instead, so territory becomes contestable gradually rather than all at once. That fits the sport better — showing up should count |
 | Alembic migrations | `create_all` cannot alter an existing table, so the schema cannot move without manual SQL |
 | A test suite | There are none yet. The contract check is a floor, not a substitute |
 | Refresh tokens | Login returns an access token only, so a session ends rather than renewing |
