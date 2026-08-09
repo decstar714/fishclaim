@@ -213,11 +213,9 @@ values. A new config key goes in both `.env.example` and the table above.
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-The app validates it at startup and refuses to boot on a blank, short, or placeholder value —
-including `dev-secret-change-me`, which early commits used as a hardcoded default and which is
-therefore readable by anyone in this repo's git log. Nothing else has ever been committed here:
-no real key, no token, no database password. Changing the key invalidates every issued token, so
-everyone logs in again.
+The app validates it at startup and refuses to boot on a blank, short, or placeholder value, so a
+fresh clone cannot accidentally run on a shared default. Changing the key invalidates every issued
+token, so everyone logs in again.
 
 A pre-commit scanner blocks credential-shaped strings before they can be staged. It is not
 installed by cloning — hook it up once per checkout:
