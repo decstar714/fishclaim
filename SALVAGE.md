@@ -1,8 +1,13 @@
 # Salvage notes
 
-Written 2026-08-08, when this branch was recovered from the homelab. The commit
-before this one is the working tree exactly as it stood there on 2025-11-28,
-untouched. Everything below is what I found trying to run it.
+Written 2026-08-08, when this branch was recovered from a machine it had been
+sitting on, uncommitted, since 2025-11-28. The commit before this one is that
+working tree exactly as it stood, untouched. Everything below is what I found
+trying to run it.
+
+**Before this branch is pushed anywhere:** its `README.md` is the original from
+that machine and still hardcodes an absolute home-directory path in the setup
+steps. These are public repos. Clean that first.
 
 ## Read this first
 
