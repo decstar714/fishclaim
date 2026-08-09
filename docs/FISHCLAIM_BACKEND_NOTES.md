@@ -25,7 +25,7 @@
 
 ## Local dev (host)
 ```bash
-cd /home/decstar714/workspace/projects/fishclaim/backend
+cd path/to/fishclaim-backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -35,7 +35,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Docker / Compose
 ```bash
-cd /home/decstar714/workspace/projects/fishclaim/backend
+cd path/to/fishclaim-backend
 cp .env.example .env   # set real values
 docker network create fishclaim_default  # if missing
 docker compose up -d --build backend     # maps ${BACKEND_PORT:-8080} -> container 8000
@@ -109,7 +109,7 @@ docker compose up -d --build backend     # maps ${BACKEND_PORT:-8080} -> contain
 
 ## Tests
 ```bash
-cd /home/decstar714/workspace/projects/fishclaim/backend
+cd path/to/fishclaim-backend
 source .venv/bin/activate
 pip install pytest
 pytest
@@ -127,7 +127,7 @@ pytest
 - DB: models are simple, no migrations yet; ensure Postgres/PostGIS available before running.
 
 ## Quick start for new devs
-1) Clone repos into `/home/decstar714/workspace/projects/fishclaim/{backend,frontend}`.  
+1) Clone repos into `<path>`.  
 2) Backend: create venv, install requirements, configure `.env`, run `uvicorn app.main:app --reload`.  
 3) DB: ensure Postgres/PostGIS reachable (`DATABASE_URL`); create `fishclaim_default` network if using compose.
 4) Compose option: `docker compose up -d --build backend` (after `.env` and network).
