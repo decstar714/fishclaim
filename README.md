@@ -301,3 +301,11 @@ river, which is where this is meant to be used.
 
 **Not done yet:** real zone geometry, claims overlay rendering, watershed layers, species loaded
 from the API, session logging.
+
+A claim leaderboard and a polygon map with click-to-claim do exist, on
+`homelab/leaflet-map-and-stats` — recovered from the homelab in August 2026, uncommitted there
+since November 2025. It branches from `origin/main`, so it is behind `dev` by every merged PR,
+and its `MapView` is **react-leaflet** rather than MapLibre, which is the dependency `dev`
+deliberately pruned. The endpoints it talks to and the click-to-claim interaction are the parts
+worth lifting; the rendering layer is not. Both features need the matching backend branch,
+`homelab/postgis-restructure`.
