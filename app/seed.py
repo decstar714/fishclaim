@@ -8,8 +8,14 @@ from app.auth import get_password_hash
 DEFAULT_USER_EMAIL = os.getenv("SEED_USER_EMAIL", "owner@example.com")
 DEFAULT_USER_USERNAME = os.getenv("SEED_USER_USERNAME", "owner")
 DEFAULT_USER_DISPLAY_NAME = os.getenv("SEED_USER_DISPLAY_NAME", "FishClaim Owner")
-DEFAULT_USER_PASSWORD = os.getenv("SEED_USER_PASSWORD", "ChangeMe!123")
+DEFAULT_USER_PASSWORD = os.getenv("SEED_USER_PASSWORD", "")
 FORCE_RESET = os.getenv("SEED_FORCE_RESET", "true").lower() in {"1", "true", "yes"}
+
+if not DEFAULT_USER_PASSWORD:
+    raise SystemExit(
+        "SEED_USER_PASSWORD is not set. The seed creates an owner account; "
+        "there is no safe default for its password."
+    )
 
 def main():
     print("Creating tables (if not exist)...")
