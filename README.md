@@ -339,3 +339,12 @@ CI skips pytest when the directory is absent, so the build stays green without t
 
 **Not built yet:** zone geometry, claim photos beyond a URL field, leaderboards, and anything
 that needs to know a zone's shape rather than its order.
+
+Some of that *has* been built, on a branch rather than here. `homelab/postgis-restructure`
+holds a PostGIS design recovered from the homelab in August 2026, where it had sat uncommitted
+since November 2025: real `MULTIPOLYGON` geometry on waters and reaches, an app factory with
+`app/core` / `app/api` / `app/services`, `/reaches`, `/stats/claims`, `/map/state`, seven tests
+and a demo seeder. It branches from `2093cc8`, four commits behind what `main` became, so it is
+a parallel design rather than a continuation — it predates `sessions` entirely and never got the
+partial unique index. `SALVAGE.md` on that branch says what runs, what does not, and what is
+worth lifting; `docs/FISHCLAIM_SESSION_LOG.md` is the author's own account of the reasoning.
