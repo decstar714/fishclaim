@@ -1,5 +1,5 @@
-from app.database import SessionLocal, Base, engine
 from app import models
+from app.core.database import SessionLocal, Base, engine
 
 def main():
     print("Creating tables (if not exist)...")
@@ -25,9 +25,8 @@ def main():
     db.flush()  # get user.id
 
     print("Seeding water...")
-    water = models.Water(
+    water = models.WaterBody(
         name="South Branch Raritan River",
-        type="river",
         region="NJ",
         description="Home water",
     )
@@ -35,21 +34,13 @@ def main():
     db.flush()
 
     print("Seeding zones...")
-    zones = [
-        models.Zone(
-            water_id=water.id,
-            name="Ken Lockwood Gorge",
-            description="TCA gorge section",
-            order_index=1,
-        ),
-        models.Zone(
-            water_id=water.id,
-            name="Califon to Cokesbury",
-            description="Downstream section",
-            order_index=2,
-        ),
-    ]
-    db.add_all(zones)
+    reach = models.Reach(
+        water_body_id=water.id,
+        name="Ken Lockwood Gorge",
+        description="TCA gorge section",
+        order_index=1,
+    )
+    db.add(reach)
 
     print("Seeding species...")
     species = [
@@ -73,4 +64,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

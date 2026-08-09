@@ -1,14 +1,13 @@
-from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .database import get_db
-from . import models
+from app.core.config import get_settings
+from app.core.database import get_db
+from app import models
 
 settings = get_settings()
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
@@ -33,3 +32,10 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+def get_current_user_id(x_user_id: str | None = Header(None)) -> str:
+    """
+    Lightweight user placeholder: reads X-User-Id header, defaults to 'test-user'.
+    """
+    return x_user_id or "test-user"

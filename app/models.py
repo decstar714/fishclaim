@@ -1,17 +1,27 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+from enum import Enum
+
+from geoalchemy2 import Geometry
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
     Boolean,
+    Column,
+    DateTime,
     Float,
     ForeignKey,
+    Integer,
+    String,
     UniqueConstraint,
+    DateTime,
 )
 from sqlalchemy.orm import relationship
 
-from .database import Base
+from app.core.database import Base
+
+
+class ClaimStatus(str, Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REJECTED = "rejected"
 
 
 class User(Base):
@@ -25,33 +35,33 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     catches = relationship("Catch", back_populates="user")
-    claims = relationship("Claim", back_populates="user")
 
 
-class Water(Base):
+class WaterBody(Base):
     __tablename__ = "waters"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
-    type = Column(String, nullable=False, default="river")
     region = Column(String)
     description = Column(String)
+    geometry = Column(Geometry("MULTIPOLYGON", srid=4326), nullable=True)
 
-    zones = relationship("Zone", back_populates="water")
+    reaches = relationship("Reach", back_populates="water_body")
 
 
-class Zone(Base):
-    __tablename__ = "zones"
+class Reach(Base):
+    __tablename__ = "reaches"
 
     id = Column(Integer, primary_key=True, index=True)
-    water_id = Column(Integer, ForeignKey("waters.id"), nullable=False)
+    water_body_id = Column(Integer, ForeignKey("waters.id"), nullable=False)
     name = Column(String, nullable=False)
     description = Column(String)
+    geometry = Column(Geometry("MULTIPOLYGON", srid=4326), nullable=True)
     order_index = Column(Integer, default=0)
 
-    water = relationship("Water", back_populates="zones")
-    catches = relationship("Catch", back_populates="zone")
-    claims = relationship("Claim", back_populates="zone")
+    water_body = relationship("WaterBody", back_populates="reaches")
+    catches = relationship("Catch", back_populates="reach")
+    claims = relationship("Claim", back_populates="reach")
 
 
 class Species(Base):
@@ -71,8 +81,8 @@ class Catch(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    water_id = Column(Integer, ForeignKey("waters.id"), nullable=False)
-    zone_id = Column(Integer, ForeignKey("zones.id"), nullable=False)
+    water_body_id = Column(Integer, ForeignKey("waters.id"), nullable=False)
+    reach_id = Column(Integer, ForeignKey("reaches.id"), nullable=False)
     species_id = Column(Integer, ForeignKey("species.id"), nullable=False)
 
     length_cm = Column(Float, nullable=False)
@@ -89,9 +99,9 @@ class Catch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="catches")
-    zone = relationship("Zone", back_populates="catches")
+    reach = relationship("Reach", back_populates="catches")
     species = relationship("Species", back_populates="catches")
-    water = relationship("Water")
+    water_body = relationship("WaterBody")
     claim = relationship("Claim", back_populates="catch", uselist=False)
 
 
@@ -99,28 +109,23 @@ class Claim(Base):
     __tablename__ = "claims"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    water_id = Column(Integer, ForeignKey("waters.id"), nullable=False)
-    zone_id = Column(Integer, ForeignKey("zones.id"), nullable=False)
-    species_id = Column(Integer, ForeignKey("species.id"), nullable=False)
-    catch_id = Column(Integer, ForeignKey("catches.id"), nullable=False)
+    user_id = Column(String, nullable=False)
+    water_body_id = Column(Integer, ForeignKey("waters.id"), nullable=False)
+    reach_id = Column(Integer, ForeignKey("reaches.id"), nullable=False)
+    species_id = Column(Integer, ForeignKey("species.id"), nullable=True)
+    catch_id = Column(Integer, ForeignKey("catches.id"), nullable=True)
 
-    length_cm = Column(Float, nullable=False)
-    is_active = Column(Boolean, default=True)
+    length_cm = Column(Float, nullable=False, default=0.0)
+    status = Column(String, default=ClaimStatus.ACTIVE.value, nullable=False)
+    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(hours=72))
+    note = Column(String)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     revoked_at = Column(DateTime)
 
-    user = relationship("User", back_populates="claims")
-    zone = relationship("Zone", back_populates="claims")
+    reach = relationship("Reach", back_populates="claims")
     species = relationship("Species", back_populates="claims")
     catch = relationship("Catch", back_populates="claim")
-    water = relationship("Water")
+    water_body = relationship("WaterBody")
 
-    __table_args__ = (
-        UniqueConstraint(
-            "zone_id", "species_id", "is_active",
-            name="uq_active_claim_per_zone_species",
-        ),
-    )
-
+    __table_args__ = ()

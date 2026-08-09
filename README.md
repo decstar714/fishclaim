@@ -1,6 +1,6 @@
 # FishClaim Backend
 
-FastAPI backend for FishClaim. Provides auth, waters/zones, catches, and claim routes backed by PostgreSQL/PostGIS. Dockerized for local dev and deployed via docker-compose.
+FastAPI backend for FishClaim. Provides auth, waters/zones, catches, and claim routes backed by PostgreSQL/PostGIS. Dockerized for local dev and compose.
 
 ## Tech stack
 - FastAPI + Uvicorn
@@ -8,53 +8,54 @@ FastAPI backend for FishClaim. Provides auth, waters/zones, catches, and claim r
 - PostgreSQL/PostGIS
 - Docker + docker-compose
 
+## Structure
+- `app/main.py`: app factory, router includes.
+- `app/core`: config (pydantic-settings), DB session, security/token helpers.
+- `app/api/routes`: health, auth, waters, catches, claims.
+- `app/api/deps`: shared FastAPI dependencies (auth).
+- `app/models`, `app/schemas`: SQLAlchemy + Pydantic models.
+- `tests/`: pytest starter (health).
+- `docs/`: backend notes and session log.
+- `scripts/`: helper scripts (session log).
+
 ## Getting started (local Python)
-1. `python -m venv .venv`
-2. `source .venv/bin/activate` (Windows: `./.venv/Scripts/activate`)
-3. `pip install -r requirements.txt`
-4. Copy `.env.example` to `.env` and set values (e.g. `DATABASE_URL=postgresql+psycopg2://user:password@fishclaim_db:5432/fishclaim`, `SECRET_KEY=...`).
-5. Run the API: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+```bash
+cd /home/decstar714/workspace/projects/fishclaim/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # set DATABASE_URL, SECRET_KEY, etc.
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
 ## Running with Docker
-From the backend repo root (`/home/conor/fishclaim/backend`):
-1. `cp .env.example .env` and update values (use `fishclaim_db` as the host if you are attaching to the existing Postgres/PostGIS container). `SECRET_KEY` must be set to a non-default value for any deployed environment.
-2. Ensure the Docker network `fishclaim_default` exists (created by the current stack). If missing, create it: `docker network create fishclaim_default`.
-3. Build and start the backend: `docker compose up -d --build backend`
-4. API will be on port `8080` by default (override with `BACKEND_PORT` in `.env`).
+```bash
+cd /home/decstar714/workspace/projects/fishclaim/backend
+cp .env.example .env  # set real values
+docker network create fishclaim_default  # if missing
+docker compose up -d --build backend
+# API on ${BACKEND_PORT:-8080} mapped to container 8000
+```
 
-Docker build uses `Dockerfile` with `requirements.txt` and the `app/` directory.
+## Frontend pairing
+- Set backend CORS to include frontend origin via `CORS_ORIGINS` in `.env`.
+- Configure frontend env (e.g., `VITE_API_BASE_URL=http://localhost:8080/api`).
 
-## Connecting to the FishClaim frontend
-To run the full stack locally with the `fishclaim` frontend repository:
+## Configuration
+- Environment via `.env` and pydantic-settings (`app/core/config.py`):
+  - `DATABASE_URL`, `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `CORS_ORIGINS`.
+- Update `.env.example` when adding new settings.
 
-1. Clone both repos side by side, e.g.:
-   ```bash
-   git clone <frontend_repo_url> ../fishclaim
-   ```
-2. Copy `.env.example` to `.env` in this backend repo and set values (ensure `CORS_ORIGINS` includes the frontend dev host, e.g. `http://localhost:5173`).
-3. Start the backend (Docker or local Python). With Docker:
-   ```bash
-   docker network create fishclaim_default  # only if the network does not already exist
-   docker compose up -d --build backend
-   ```
-   The API will be reachable at `http://localhost:8080/api` by default.
-4. In the frontend repo, configure its API base URL to point to the backend (for Vite apps this is typically an env var like `VITE_API_BASE=http://localhost:8080/api`).
-5. Run the frontend dev server (commonly `npm install && npm run dev -- --host --port 5173`).
+## Tests
+```bash
+source .venv/bin/activate
+pip install pytest
+pytest
+```
 
-With this setup the default CORS values allow the frontend dev server to call the backend without additional changes.
-
-### Configuration
-- `DATABASE_URL`, `SECRET_KEY`, `ALGORITHM`, and `ACCESS_TOKEN_EXPIRE_MINUTES` are read from environment variables (or `.env`).
-- `CORS_ORIGINS` can be provided as a comma-separated list to control allowed front-end origins (defaults to localhost dev ports).
-
-## Deploy script (server)
-- `./deploy.sh [branch]` (default branch is `main`) will `git pull`, build the backend image, and restart the backend container without touching the database container.
-
-## Branching model
-- `main`: stable / production
-- `dev`: integration
-- `feature/*`: feature branches
+## Session log
+- Append entries to `docs/FISHCLAIM_SESSION_LOG.md` via `bash scripts/append_session_log.sh "summary"`.
 
 ## Notes
-- Secrets should never be committed. Keep real values in `.env` (gitignored) using `.env.example` as a template.
-- If you add new config keys, update `.env.example` and this README.
+- Secrets should never be committed. Keep real values in `.env`.
+- If you add new config keys, update `.env.example`, README, and docs.
