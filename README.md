@@ -12,6 +12,19 @@ decays.
 ![React](https://img.shields.io/badge/react-19-61dafb)
 ![Postgres](https://img.shields.io/badge/postgres-15-336791)
 
+![Holding two zones](docs/img/app.png)
+
+*Ken Lockwood Gorge, held on two species at once. A claim is one row per zone per
+species, so a brown trout and a rainbow are separate territories in the same
+stretch of river — and each carries its own expiry. Log a bigger fish of either
+species and the zone changes hands.*
+
+![Waters and zones](docs/img/zones.png)
+
+*Waters, then the zones inside them. Claims are per zone, not per river — Ken
+Lockwood Gorge and Califon to Cokesbury are held independently. The map opens on
+the South Branch of the Raritan, which is the water this was built for.*
+
 ---
 
 ## Table of Contents
@@ -311,7 +324,10 @@ a fetch failed.
 
 **The map data is still a placeholder.** `/api/rivers` and `/api/claims` return empty GeoJSON,
 because there is no geometry layer to serve from. Everything above works; it renders zero
-features. Wiring real zone geometry is the next meaningful piece of work.
+features — which is why the HUD in the screenshots reads `Rivers: 0 · Claims: 0` over a
+basemap with nothing drawn on it. The game is played through the rail today; the map is
+scenery until zones have shapes. Wiring real zone geometry is the next meaningful piece of
+work.
 
 ---
 

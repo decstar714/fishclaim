@@ -161,6 +161,12 @@ function App() {
     delete axios.defaults.headers.common["Authorization"];
   };
 
+  // Claims come back with species_id only, and the species list is already
+  // loaded for the catch form -- so resolve the name here rather than asking
+  // the API to denormalise it.
+  const speciesName = (id) =>
+    species.find((s) => s.id === id)?.common_name ?? `Species #${id}`;
+
   const onSessionCreated = () => {
     loadSessions();
     if (selectedZone) loadClaims(selectedZone);
@@ -499,7 +505,8 @@ function App() {
                 <ul>
                   {claims.map((c) => (
                     <li key={c.id}>
-                      Species #{c.species_id} — {c.length_cm} cm (user #{c.user_id})
+                      <strong>{speciesName(c.species_id)}</strong> — {c.length_cm} cm
+                      <span style={{ opacity: 0.7 }}> · angler #{c.user_id}</span>
                       {c.expires_at && (
                         <div style={{ fontSize: "0.85rem", opacity: 0.75 }}>
                           Expires: {new Date(c.expires_at).toLocaleString()}
