@@ -1,203 +1,50 @@
-FishClaim — Multiplayer Fishing Territory Game
-
-A map-based fishing claim game where players can claim river zones, log catches, and compete for territory in a persistent world.
-This project includes:
-
-FastAPI backend (Dockerized, running on Ubuntu + PostGIS)
-
-React + Vite frontend
-
-MapLibre map rendering (watersheds, river zones, claims)
-
-JWT authentication
-
-Territory & claim mechanics
-
-Docker deployment + NGINX staging UI
-
-
-
----
-
-
-Features (Implemented So Far)
-
-✔ Backend (FastAPI)
-
-JWT authentication (login + register)
-
-Waters & zones API (/api/waters, /api/waters/{id}/zones)
-
-Claim system:
-
-Get claims by zone
-
-Place new claim (replaces weaker claim)
-
-
-Catches log endpoint
-
-Swagger docs available at /api/docs
-
-Dockerized (FastAPI + Uvicorn + PostGIS)
-
-
-✔ Frontend (React + Vite)
-
-Login flow using JWT
-
-Token stored & attached to Axios
-
-Water selection sidebar
-
-MapLibre map with:
-
-Watersheds
-
-River zones
-
-Claims overlay
-
-
-Claim placement UI + feedback modal
-
-Error notifications
-
-API abstraction layer
-
-
-✔ DevOps / Server
-
-Backend & database running on Ubuntu server through Portainer
-
-Staging UI build served by NGINX proxying to backend
-
-Environment variables supported (VITE_API_BASE_URL)
-
-GitHub repo with:
-
-main (protected)
-
-dev (integration/testing)
-
-feature branches (feature/*)
-
-
-
-
----
-
-Tech Stack
-
-Frontend
-
-React (Vite + JSX)
-
-MapLibre GL
-
-Axios
-
-Tailwind (optional)
-
-Docker + NGINX (for staging)
-
-
-Backend
-
-FastAPI
-
-PostgreSQL + PostGIS
-
-SQLAlchemy
-
-Pydantic Schemas
-
-JWT Authentication
-
-
-DevOps
-
-Docker / Docker Compose
-
-Portainer (Ubuntu server)
-
-NGINX reverse proxy
-
-GitHub flow branching strategy
-
-
-
----
-
-Local Development Setup
-
-1) Clone the repo
-
-git clone https://github.com/<yourname>/fishclaim.git
-cd fishclaim/ui
-
-2) Install dependencies
-
+FishClaim Frontend (React + Vite)
+=================================
+
+Map-based UI for FishClaim. Talks to the FastAPI backend (`/api`).
+
+## Stack
+- React + Vite
+- Axios for API calls
+- MapLibre + Leaflet layers
+
+## Dev setup
+```bash
+cd /home/decstar714/workspace/projects/fishclaim/frontend
 npm install
+echo "VITE_API_BASE_URL=http://localhost:8080/api" > .env.local  # adjust port/host
+npm run dev -- --host --port 5173
+# open http://localhost:5173
+```
 
-3) Create .env.local
+## Build
+```bash
+npm run build
+npm run preview   # optional local preview of production build
+```
 
-VITE_API_BASE_URL=http://10.100.1.37:8080/api
-MAP_STYLE=https://demotiles.maplibre.org/style.json
+## Structure
+- `src/main.jsx`: bootstraps app.
+- `src/App.jsx`: main layout, fetches waters/zones/claims, handles auth + catch logging.
+- `src/features/map/MapView`: map rendering (claims/waters); check here for map/territory logic.
+- `src/routes`: route components (if expanded).
+- `src/assets`: static assets.
+- Styles in `src/App.css` / `src/index.css`.
 
-4) Run Vite dev server
+## API config
+- Base URL via `VITE_API_BASE_URL` (required).
+- Auth token stored in localStorage under `auth_token`; attached to Axios default headers on load.
+- Key endpoints used: `/waters`, `/waters/{id}/zones`, `/claims/zone/{id}`, `/auth/login`, `/catches/`.
 
-npm run dev -- --host
+## Map & claims (interactive)
+- Map state fetched from `/api/map/state` (see `src/features/map/MapView.jsx`).
+- Draws reaches as polygons (Leaflet) using `geometry_geojson`. Claimed reaches are highlighted.
+- Click a reach to see details and claim it via `POST /api/claims/` (sends `X-User-Id` header; defaults to `demo-user` if none set).
+- Leaderboard: `src/features/stats/ClaimLeaderboard.jsx` consumes `/api/stats/claims`.
 
-Your UI will be available at:
-
-http://localhost:5173
-http://<PC-LAN-IP>:5173 (for testing on your phone)
-
-
----
-
-Running the Backend (Docker)
-
-Backend & PostGIS run via Portainer on your server:
-
-API Base URL: http://10.100.1.37:8080/api
-
-Swagger docs: http://10.100.1.37:8080/docs
-
-
-If you need to rebuild:
-
-docker compose up -d --build
-
-
----
-
-Staging UI Deployment (Docker + NGINX)
-
-The UI has a production build served via NGINX.
-Example files included in repo:
-
-nginx.conf
-
-server {
-  listen 80;
-  root /usr/share/nginx/html;
-
-  location / {
-    try_files $uri /index.html;
-  }
-
-  location /api/ {
-    proxy_pass http://10.100.1.37:8080/api/;
-  }
-}
-
-Dockerfile
-
-FROM node:20-alpine AS build
-WORKDIR /app
-COPY package*.json ./
+## Notes / cleanup targets
+- Keep components lean; remove unused assets as you iterate.
+- If you add env vars, document them here and ensure `.env.local` reflects them.
 RUN npm ci
 COPY . .
 RUN npm run build

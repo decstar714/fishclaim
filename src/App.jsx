@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import MapView from "./features/map/MapView"; // 👈 direct default import
+import ClaimLeaderboard from "./features/stats/ClaimLeaderboard";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL; // keep your current var
 
@@ -377,30 +378,20 @@ function App() {
           overflow: "hidden",     // prevent scrollbars on map
         }}
       >
-        {!token ? (
-          <div
-            style={{
-              height: "100%",
-              display: "grid",
-              placeItems: "center",
-              color: "#94a3b8",
-            }}
-          >
-            Log in to view the map.
-          </div>
-        ) : (
-          <div
-            style={{
-              height: "100%",
-              width: "100%",
-              background: "#0b1220",
-            }}
-          >
-            <MapView token={token} /> {/* ✅ active again */}
-          </div>
-        )}
+        <div
+          style={{
+            height: "100%",
+            width: "100%",
+            background: "#0b1220",
+          }}
+        >
+          <MapView />
+        </div>
       </main>
 
+      </div>
+      <div style={{ marginTop: "1rem" }}>
+        <ClaimLeaderboard />
       </div>
     </div>
   );

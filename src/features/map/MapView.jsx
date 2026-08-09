@@ -1,138 +1,154 @@
-import { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
-import { fetchRiversByBbox, fetchClaimsByBbox } from "./api";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { MapContainer, TileLayer, GeoJSON, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
-const STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
-const CENTER = [-74.742, 40.612];
-const ZOOM = 10;
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const DEFAULT_CENTER = [40.612, -74.742];
+const DEFAULT_ZOOM = 12;
 
-function bboxFromMap(map) {
-  const b = map.getBounds();
-  return { minX: b.getWest(), minY: b.getSouth(), maxX: b.getEast(), maxY: b.getNorth() };
-}
-function debounce(fn, ms = 250) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-
-export default function MapView({ token }) {
-  const containerRef = useRef(null);
-  const mapRef = useRef(null);
-  const [err, setErr] = useState(null);
+export default function MapView() {
+  const [mapState, setMapState] = useState({ waters: [], reaches: [] });
   const [loading, setLoading] = useState(false);
-  const [counts, setCounts] = useState({ rivers: 0, claims: 0 });
+  const [err, setErr] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [userId, setUserId] = useState(localStorage.getItem("fc_user") || "demo-user");
+  const [claimMsg, setClaimMsg] = useState(null);
+
+  const fetchState = async () => {
+    try {
+      setLoading(true);
+      setErr(null);
+      const res = await axios.get(`${API_BASE}/map/state`);
+      setMapState({
+        waters: res.data?.waters || [],
+        reaches: res.data?.reaches || [],
+      });
+    } catch (e) {
+      setErr(e?.message || "Failed to load map state");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    fetchState();
+  }, []);
 
-    el.style.position = "absolute";
-    el.style.inset = "0";
-    el.style.height = "100%";
-    el.style.width = "100%";
+  const waterLookup = useMemo(() => {
+    const map = {};
+    (mapState.waters || []).forEach((w) => { map[w.id] = w.name; });
+    return map;
+  }, [mapState.waters]);
 
-    const map = new maplibregl.Map({
-      container: el,
-      style: STYLE,
-      center: CENTER,
-      zoom: ZOOM,
-      attributionControl: false,
-    });
-    mapRef.current = map;
-    window.fcMap = map; // debug
+  const handleClaim = async (reachId) => {
+    try {
+      setClaimMsg(null);
+      await axios.post(
+        `${API_BASE}/claims/`,
+        { reach_id: reachId, note: "Claimed from map UI" },
+        { headers: { "X-User-Id": userId } }
+      );
+      setClaimMsg("Claim created!");
+      await fetchState();
+    } catch (e) {
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail || e?.message;
+      setClaimMsg(status === 409 ? "Reach already claimed" : detail || "Claim failed");
+    }
+  };
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-    const ro = new ResizeObserver(() => map.resize());
-    ro.observe(el);
-    map.__ro = ro;
+  const reachFeatures = useMemo(
+    () =>
+      (mapState.reaches || [])
+        .filter((r) => r.geometry_geojson)
+        .map((r) => ({
+          type: "Feature",
+          properties: r,
+          geometry: r.geometry_geojson,
+        })),
+    [mapState.reaches]
+  );
 
-    map.on("error", (e) => {
-      console.error("[Map] error", e?.error || e);
-      setErr(String(e?.error?.message || e?.message || e));
-    });
-
-    // create sources/layers once
-    map.on("load", () => {
-      if (!map.getSource("rivers")) {
-        map.addSource("rivers", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-        map.addLayer({
-          id: "rivers-line",
-          type: "line",
-          source: "rivers",
-          paint: {
-            "line-color": "#2b7abf",
-            "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.8, 8, 2.2, 12, 3.5],
-          },
-        });
-      }
-      if (!map.getSource("claims")) {
-        map.addSource("claims", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-        map.addLayer({
-          id: "claims-fill",
-          type: "fill",
-          source: "claims",
-          paint: { "fill-color": ["coalesce", ["get", "color"], "#f59e0b"], "fill-opacity": 0.35 },
-        });
-        map.addLayer({
-          id: "claims-outline",
-          type: "line",
-          source: "claims",
-          paint: { "line-color": "#2b2b2b", "line-width": 1 },
-        });
-      }
-
-      const refetch = debounce(async () => {
-        if (!token) return; // gate until logged-in
-        const bbox = bboxFromMap(map);
-        try {
-          setLoading(true);
-          setErr(null);
-          const [r, c] = await Promise.all([
-            fetchRiversByBbox(token, bbox), // → { features: [...] }
-            fetchClaimsByBbox(token, bbox), // → { claims: [...] }
-          ]);
-          const riversFc = { type: "FeatureCollection", features: r?.features || [] };
-          const claimsFc = {
-            type: "FeatureCollection",
-            features: (c?.claims || []).map((x) => ({ type: "Feature", properties: { ...x }, geometry: x.geometry })),
-          };
-          map.getSource("rivers").setData(riversFc);
-          map.getSource("claims").setData(claimsFc);
-          setCounts({ rivers: riversFc.features.length, claims: claimsFc.features.length });
-        } catch (e) {
-          console.warn("[API] fetch fail", e);
-          setErr(String(e?.message || e));
-        } finally {
-          setLoading(false);
-        }
-      }, 250);
-
-      refetch();
-      map.on("moveend", refetch);
-    });
-
-    // cleanup
-    return () => {
-      try { map.__ro?.disconnect?.(); } catch {}
-      map.remove();
-      mapRef.current = null;
+  const styleReach = (feature) => {
+    const active = feature?.properties?.active_claim;
+    return {
+      color: active ? "#f59e0b" : "#3b82f6",
+      weight: 2,
+      fillOpacity: active ? 0.45 : 0.2,
+      fillColor: active ? "#f59e0b" : "#60a5fa",
     };
-  }, [token]);
+  };
 
   return (
-    <div style={{ position: "relative", height: "100%", width: "100%" }}>
-      <div ref={containerRef} />
-      {/* HUD */}
-      <div style={{ position: "absolute", left: 8, top: 8, display: "flex", gap: 8 }}>
-        <div style={{ background: "rgba(255,255,255,.9)", borderRadius: 12, padding: "6px 10px" }}>
-          <strong style={{ fontSize: 12 }}>FishClaim</strong>
-          <div style={{ fontSize: 10, opacity: .8 }}>Map MVP</div>
-          <div style={{ fontSize: 10, opacity: .8, marginTop: 4 }}>
-            {loading ? "Loading…" : `Rivers: ${counts.rivers} • Claims: ${counts.claims}`}
-          </div>
+    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1rem", height: "600px" }}>
+      <div style={{ height: "100%", borderRadius: 8, overflow: "hidden", border: "1px solid #1f2937" }}>
+        <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} style={{ height: "100%", width: "100%" }}>
+          <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <GeoJSON
+            key={reachFeatures.length}
+            data={{ type: "FeatureCollection", features: reachFeatures }}
+            style={styleReach}
+            onEachFeature={(feature, layer) => {
+              layer.on("click", () => setSelected(feature.properties));
+              layer.bindPopup(`${feature.properties.name}`);
+            }}
+          />
+        </MapContainer>
+      </div>
+      <div style={{ background: "#0b1220", color: "#e5e7eb", borderRadius: 8, padding: "0.75rem", border: "1px solid #1f2937" }}>
+        <div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Reaches & Claims</div>
+        {loading && <div>Loading map state…</div>}
+        {err && <div style={{ color: "#f87171" }}>{err}</div>}
+        <div style={{ marginBottom: "0.75rem" }}>
+          <label style={{ fontSize: "0.9rem" }}>
+            User ID:&nbsp;
+            <input
+              value={userId}
+              onChange={(e) => {
+                setUserId(e.target.value);
+                localStorage.setItem("fc_user", e.target.value || "demo-user");
+              }}
+              style={{ padding: "4px 6px", background: "#111827", border: "1px solid #1f2937", color: "#e5e7eb", borderRadius: 4 }}
+            />
+          </label>
         </div>
-        {err && (
-          <div style={{ background: "#dc2626", color: "#fff", borderRadius: 12, padding: "6px 10px", fontSize: 12, maxWidth: 360 }}>
-            {err}
+        {selected ? (
+            <div style={{ border: "1px solid #1f2937", borderRadius: 8, padding: "0.75rem" }}>
+            <div style={{ fontWeight: 600 }}>{selected.name}</div>
+            <div style={{ fontSize: "0.9rem", opacity: 0.8 }}>
+              Water: {waterLookup[selected.water_body_id] || selected.water_body_id}
+            </div>
+            {selected.active_claim ? (
+              <div style={{ marginTop: "0.35rem", color: "#fbbf24" }}>
+                Claimed by {selected.active_claim.user_id} (status {selected.active_claim.status})
+                {selected.active_claim.expires_at ? ` until ${selected.active_claim.expires_at}` : ""}
+              </div>
+            ) : (
+              <div style={{ marginTop: "0.35rem", opacity: 0.8 }}>No active claim</div>
+            )}
+            <button
+              onClick={() => handleClaim(selected.id)}
+              style={{
+                marginTop: "0.5rem",
+                padding: "0.5rem 0.75rem",
+                background: "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              Claim this reach
+            </button>
+            {claimMsg && <div style={{ marginTop: "0.4rem", fontSize: "0.9rem" }}>{claimMsg}</div>}
           </div>
+        ) : (
+          <div style={{ fontSize: "0.9rem", opacity: 0.8 }}>Click a reach on the map to view/claim.</div>
         )}
+        <div style={{ marginTop: "0.75rem", fontSize: "0.9rem" }}>
+          Total reaches: {mapState.reaches.length} | Waters: {mapState.waters.length}
+        </div>
       </div>
     </div>
   );
