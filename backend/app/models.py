@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -48,6 +49,16 @@ class Zone(Base):
     name = Column(String, nullable=False)
     description = Column(String)
     order_index = Column(Integer, default=0)
+
+    # A zone is a stretch of river, so its geometry is a line, not an area.
+    # USGS has already segmented every stream in the country: `comid` is the
+    # NHDPlus identifier for this reach, and `geometry_geojson` is the LineString
+    # it hands back. Stored as text rather than a PostGIS column on purpose --
+    # the map only needs to draw it, and nothing here does spatial queries yet.
+    # The day something needs "which reach contains this point", that is the
+    # moment PostGIS earns its place, not before.
+    comid = Column(String, index=True)
+    geometry_geojson = Column(Text)
 
     water = relationship("Water", back_populates="zones")
     catches = relationship("Catch", back_populates="zone")
